@@ -7,6 +7,20 @@ system:
       name: Grefer
       password: 123456
 
+spring:
+  servlet:
+    multipart:
+      enabled: true        # 开启文件上传（默认开启）
+      max-file-size: 10MB  # 单个文件最大大小
+      max-request-size: 50MB # 单次请求最大大小
+      file-size-threshold: 2KB # 超过该大小写入磁盘，否则内存
 
 
+qclode:
+  cos:
+    rootSrc: "ai-docs-qa-platform-1390443137.cos.ap-beijing.myqcloud.com"
+    SecretId: "AKIDNrBICsaItHSSGqDNJ3vc6NSJwQltqa7R"
+    SecretKey: "AE4rStCNUipw4INEsQmuseEbljU2LROh"
+    bucketName: "ai-docs-qa-platform-1390443137"
+    bucketAddr: "ap-beijing"
 
