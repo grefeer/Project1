@@ -1,0 +1,31 @@
+package com.aiqa.project1.service;
+
+import com.aiqa.project1.pojo.Response;
+import com.aiqa.project1.pojo.User;
+
+public interface UserService {
+
+    /**
+     * 用户注册
+     */
+    int register(User user);
+
+
+    /**
+     * 用户登录
+     * @return 包含用户信息、Token、过期时间的DTO
+     */
+    Response login(String username, String password);
+
+
+    /**
+     * 根据用户名查询用户信息
+     */
+    User getUserInfo(String username);
+
+    /**
+     * 修改密码
+     */
+    void changePassword(String username, String oldPassword, String newPassword);
+
+}

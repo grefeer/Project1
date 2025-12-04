@@ -1,0 +1,12 @@
+system:
+  jwt:
+    secret-key: your-long-secret-key-32bytes-min
+    expiration: 7200000
+  init:
+    admin:
+      name: Grefer
+      password: 123456
+
+
+
+
