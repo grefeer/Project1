@@ -7,6 +7,22 @@ system:
       name: Grefer
       password: 123456
 
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/db01
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 250MB
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.aiqa.project1.pojo
+
 qclode:
   cos:
     rootSrc: "ai-docs-qa-platform-1390443137.cos.ap-beijing.myqcloud.com"
