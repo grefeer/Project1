@@ -7,6 +7,16 @@ system:
       name: Grefer
       password: 123456
 
+qclode:
+  cos:
+    rootSrc: "ai-docs-qa-platform-1390443137.cos.ap-beijing.myqcloud.com"
+    SecretId: "AKIDNrBICsaItHSSGqDNJ3vc6NSJwQltqa7R"
+    SecretKey: "AE4rStCNUipw4INEsQmuseEbljU2LROh"
+    bucketName: "ai-docs-qa-platform-1390443137"
+    bucketAddr: "ap-beijing"
 
+snowflake:
+  datacenterId: 1
+  machineId: 1
 
 
