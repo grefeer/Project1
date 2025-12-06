@@ -1,8 +1,9 @@
 package com.aiqa.project1.initializer;
 
 import com.aiqa.project1.mapper.UserMapper;
-import com.aiqa.project1.pojo.User;
+import com.aiqa.project1.pojo.user.User;
 import com.aiqa.project1.utils.JwtUtils;
+import com.aiqa.project1.utils.UserUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.env.Environment;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Component
 public class SystemInitRunner implements CommandLineRunner {
@@ -28,6 +30,14 @@ public class SystemInitRunner implements CommandLineRunner {
     public void run(String... args) throws Exception {
         initAdminUser();
         initJwtUtils();
+        initCreateFiles();
+    }
+
+    private void initCreateFiles() {
+        List<String> usernameList = userMapper.getUsersUserName();
+        for (String username : usernameList) {
+            UserUtils.createUsersFileIfNotExists("src/main/resources/data", username);
+        }
     }
 
     private void initAdminUser() {
@@ -52,9 +62,13 @@ public class SystemInitRunner implements CommandLineRunner {
 
         userMapper.insertUser(initAdmin);
         System.out.println("系统初始化：ADMIN 用户创建成功，初始密码：" + initPwd);
+
+
+
     }
 
     private void initJwtUtils() {
         JwtUtils.setEnvironment(environment);
     }
+
 }

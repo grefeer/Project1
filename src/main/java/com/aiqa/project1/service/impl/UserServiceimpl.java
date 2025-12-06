@@ -3,6 +3,8 @@ package com.aiqa.project1.service.impl;
 import com.aiqa.project1.controller.UserController;
 import com.aiqa.project1.mapper.UserMapper;
 import com.aiqa.project1.pojo.*;
+import com.aiqa.project1.pojo.user.LoginDataUser;
+import com.aiqa.project1.pojo.user.User;
 import com.aiqa.project1.service.UserService;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.JwtUtils;
@@ -53,8 +55,8 @@ public class UserServiceimpl implements UserService {
     }
 
     @Override
-    public Response login(String username, String password) {
-        Response resp = new Response();
+    public Result login(String username, String password) {
+        Result resp = new Result();
 
         LocalDateTime now = LocalDateTime.now();
         String ExpireTime = now.plusHours(2).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
@@ -70,9 +72,9 @@ public class UserServiceimpl implements UserService {
             );
         }
 
-        String token = JwtUtils.GenerateJwt(UserUtils.User2Map(user1), username);
+        String token = JwtUtils.GenerateJwt(UserUtils.User2Map(user1), user1.getUserId().toString());
         user1.setToken(token);
-        LoginData data = UserUtils.copyDuplicateFieldsFromA2B(user1, new LoginData());
+        LoginDataUser data = UserUtils.copyDuplicateFieldsFromA2B(user1, new LoginDataUser());
         data.setExpireTime(ExpireTime);
 
         resp.setCode(ResponseCode.LOGIN_SUCCESS.getCode());

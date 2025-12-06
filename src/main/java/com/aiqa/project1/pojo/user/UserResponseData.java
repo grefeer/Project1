@@ -1,14 +1,16 @@
-package com.aiqa.project1.pojo;
+package com.aiqa.project1.pojo.user;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
-public class AuthInfo {
-    private String userId;
+@NoArgsConstructor
+public class UserResponseData {
+
+    private Integer userId;
     private String username;
     private String role;
+
 }

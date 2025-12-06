@@ -1,3 +1,31 @@
+spring:
+  application:
+    name: Project1
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 105MB
+  datasource:
+    url: jdbc:mysql://localhost:3306/db01
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 123456
+  sql:
+    init:
+          # 将模式设置为 never (从不执行初始化脚本)
+          mode: never
+
+
+logging:
+  level:
+    org:
+      springframework:
+        beans:
+          factory:
+            support: DEBUG
+        context:
+          annotation: DEBUG
+
 system:
   jwt:
     secret-key: your-long-secret-key-32bytes-min
@@ -7,6 +35,40 @@ system:
       name: Grefer
       password: 123456
 
+mybatis-plus:
+  # 1. MyBatis Mapper 文件位置
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+  # 2. 实体类包扫描路径 (如果你的实体类不在启动类同级或子包中，需要配置)
+  type-aliases-package: com.aiqa.project1.pojo # 替换为你的实体类（POJO/Entity）所在包
+
+  # 3. 配置数据库下划线到Java驼峰的自动映射
+  # 默认为 true，建议保持开启，MyBatis-Plus 会自动将数据库的 column_name 映射到 Java 类的 fieldName
+  map-underscore-to-camel-case: true
+
+  # 4. 配置全局配置
+  global-config:
+    # 4.1 自动填充字段（例如创建时间、更新时间）
+    db-config:
+      schema:
+        enabled: false
+
+  # 5. 日志配置 (可选，用于调试 Mybatis 的 SQL)
+  configuration:
+    # 开启 SQL 日志输出到控制台
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 设置连接超时时间（如果连接池配置不在这）
+    # default-statement-timeout: 30000
 
 
+qclode:
+  cos:
+    rootSrc: "ai-docs-qa-platform-1390443137.cos.ap-beijing.myqcloud.com"
+    SecretId: "AKIDNrBICsaItHSSGqDNJ3vc6NSJwQltqa7R"
+    SecretKey: "AE4rStCNUipw4INEsQmuseEbljU2LROh"
+    bucketName: "ai-docs-qa-platform-1390443137"
+    bucketAddr: "ap-beijing"
 
+snowflake:
+  datacenterId: 1
+  machineId: 1

@@ -1,5 +1,8 @@
 package com.aiqa.project1.pojo;
 
+import lombok.Getter;
+
+@Getter
 public enum ResponseCode {
     REGISTER_SUCCESS(200, "注册成功"),
     LOGIN_SUCCESS(200, "登录成功"),
@@ -16,14 +19,6 @@ public enum ResponseCode {
     ResponseCode(int code, String message) {
         this.code = code;
         this.message = message;
-    }
-
-    public int getCode() {
-        return code;
-    }
-
-    public String getMessage() {
-        return message;
     }
 
 }

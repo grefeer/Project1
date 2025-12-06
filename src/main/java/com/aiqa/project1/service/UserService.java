@@ -1,7 +1,7 @@
 package com.aiqa.project1.service;
 
-import com.aiqa.project1.pojo.Response;
-import com.aiqa.project1.pojo.User;
+import com.aiqa.project1.pojo.Result;
+import com.aiqa.project1.pojo.user.User;
 
 public interface UserService {
 
@@ -15,7 +15,7 @@ public interface UserService {
      * 用户登录
      * @return 包含用户信息、Token、过期时间的DTO
      */
-    Response login(String username, String password);
+    Result login(String username, String password);
 
 
     /**

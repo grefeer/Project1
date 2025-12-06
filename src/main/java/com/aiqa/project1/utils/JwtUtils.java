@@ -34,7 +34,7 @@ public class JwtUtils {
         Date now = new Date();
         return Jwts.builder().signWith(SignatureAlgorithm.HS256, SECRET_KEY)
                 .setClaims(map != null ? map : Map.of())                // 设置主要内容
-                .setSubject(subject)                                    // 设置主题（用户名）
+                .setSubject(subject)                                    // 设置主题（用户ID）
                 .setIssuedAt(now)                                // 设置开始时间
                 .setExpiration(new Date(now.getTime()
                         + EXPIRATION_TIME))                            //设置过期时间
@@ -44,7 +44,6 @@ public class JwtUtils {
 
     private static <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = ParseJwt(token);
-        System.out.println(claims);
         return claimsResolver.apply(claims);
     }
 
@@ -61,17 +60,18 @@ public class JwtUtils {
             return null;
         }
         Claims claims = ParseJwt(jwt);
+        String userId = String.valueOf(claims.get("userId", Integer.class));
         String username = claims.get("username", String.class);
-        String password = claims.get("password", String.class);
         String role_jwt = claims.get("role", String.class);
         if (role_jwt == null || role_jwt.isEmpty()) {
             return null;
         }
-        return new AuthInfo(username, password, role_jwt);
+        return new AuthInfo(userId, username, role_jwt);
     }
 
-    public static String getUsernameFromToken(String token) {
+    public static String getUserIdFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
+
     }
 
 }

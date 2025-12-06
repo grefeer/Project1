@@ -1,6 +1,6 @@
 package com.aiqa.project1.mapper;
 
-import com.aiqa.project1.pojo.User;
+import com.aiqa.project1.pojo.user.User;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
@@ -9,6 +9,9 @@ import java.util.List;
 public interface UserMapper {
     @Select("select * from user")
     public List<User> getUsers();
+
+    @Select("select username from user")
+    public List<String> getUsersUserName();
 
     @Select("select userId from user where username=#{username}")
     public Integer getUserIdByUserName(String username);

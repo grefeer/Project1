@@ -1,6 +1,9 @@
 package com.aiqa.project1.controller;
 
 import com.aiqa.project1.pojo.*;
+import com.aiqa.project1.pojo.user.InfoDataUser;
+import com.aiqa.project1.pojo.user.RegisterDataUser;
+import com.aiqa.project1.pojo.user.User;
 import com.aiqa.project1.service.UserService;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.UserUtils;
@@ -18,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 
 @RestController
+@RequestMapping("/api/v1/user")
 public class UserController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
@@ -30,8 +34,8 @@ public class UserController {
 
 
     @PostMapping("/register")
-    public Response Register(@RequestBody User user) {
-        Response resp = new Response();
+    public Result Register(@RequestBody User user) {
+        Result resp = new Result();
 
         try {
             int userId = userService.register(user);
@@ -47,7 +51,7 @@ public class UserController {
 
             resp.setCode(ResponseCode.REGISTER_SUCCESS.getCode());
             resp.setMessage(ResponseCode.REGISTER_SUCCESS.getMessage());
-            resp.setData(UserUtils.copyDuplicateFieldsFromA2B(user, new RegisterData()));
+            resp.setData(UserUtils.copyDuplicateFieldsFromA2B(user, new RegisterDataUser()));
         } catch (BusinessException e) {
             resp.setCode(e.getCode());
             resp.setMessage(e.getMessage());
@@ -63,8 +67,8 @@ public class UserController {
     }
 
     @PostMapping("/login")
-    public Response Login(@RequestBody User user) {
-        Response resp = null;
+    public Result Login(@RequestBody User user) {
+        Result resp = null;
 
         try {
             resp = userService.login(user.getUsername(), user.getPassword());
@@ -76,7 +80,7 @@ public class UserController {
             log.info("----------------------------------");
 
         } catch (BusinessException e) {
-            resp = (resp == null) ? new Response() : resp;
+            resp = (resp == null) ? new Result() : resp;
             resp.setCode(e.getCode());
             resp.setMessage(e.getMessage());
             resp.setData(null);
@@ -97,17 +101,16 @@ public class UserController {
     }
 
     @GetMapping("/info")
-    public Response info(HttpServletRequest request) {
-        Response resp = new Response();
+    public Result info(HttpServletRequest request) {
+        Result resp = new Result();
 
         User user = null;
         try {
             AuthInfo authInfo = (AuthInfo)request.getAttribute("authInfo");
             user = userService.getUserInfo(authInfo.getUsername());
-            System.out.println(user.getUserId());
             resp.setCode(200);
             resp.setMessage("查询成功");
-            resp.setData(UserUtils.copyDuplicateFieldsFromA2B(user, new InfoData()));
+            resp.setData(UserUtils.copyDuplicateFieldsFromA2B(user, new InfoDataUser()));
         } catch (BusinessException e) {
             resp.setCode(e.getCode());
             resp.setMessage(e.getMessage());
@@ -122,13 +125,13 @@ public class UserController {
     }
 
     @PutMapping("/change-pwd")
-    public Response changePassword(@RequestBody Map<String, String> paramMap) {
+    public Result changePassword(@RequestBody Map<String, String> paramMap) {
 
         String oldPassword = paramMap.get("oldPassword");
         String newPassword = paramMap.get("newPassword");
         String username = paramMap.get("username");
 
-        Response resp = new Response();
+        Result resp = new Result();
         resp.setData(null);
 
         log.info("--------------修改密码--------------");
