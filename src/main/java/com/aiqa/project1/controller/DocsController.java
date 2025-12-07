@@ -2,7 +2,7 @@ package com.aiqa.project1.controller;
 
 import com.aiqa.project1.pojo.AuthInfo;
 import com.aiqa.project1.pojo.Result;
-import com.aiqa.project1.service.impl.DocsServerimpl;
+import com.aiqa.project1.service.impl.DocsServiceimpl;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.JwtUtils;
 import com.aiqa.project1.utils.TencentCOSUtil;
@@ -20,10 +20,10 @@ import java.util.List;
 public class DocsController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
-    private final DocsServerimpl docsService;
+    private final DocsServiceimpl docsService;
     private final TencentCOSUtil tencentCOSUtil;
 
-    public DocsController(DocsServerimpl docsService, TencentCOSUtil tencentCOSUtil) {
+    public DocsController(DocsServiceimpl docsService, TencentCOSUtil tencentCOSUtil) {
         this.docsService = docsService;
         this.tencentCOSUtil = tencentCOSUtil;
     }

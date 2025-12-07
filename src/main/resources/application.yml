@@ -13,15 +13,37 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
-
   servlet:
     multipart:
       max-file-size: 50MB
       max-request-size: 250MB
+  # RabbitMQ配置
+  rabbitmq:
+    host: localhost
+    port: 5672
+    virtual-host: Project1
+    username: guest
+    password: guest
+    listener:
+      simple:
+        # 手动确认模式
+        acknowledge-mode: manual
+        retry:
+          # 开启重试
+          enabled: true
+          # 最大重试次数
+          max-attempts: 5
+          # 首次重试时间间隔
+          initial-interval: 1000
+          # 重试时间间隔递增
+          max-interval: 10000
+
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
   type-aliases-package: com.aiqa.project1.pojo
+  configuration:
+    map-underscore-to-camel-case: true
 
 qclode:
   cos:
@@ -35,4 +57,43 @@ snowflake:
   datacenterId: 1
   machineId: 1
 
+langchain4j:
+  TextConfig:
+    CHUNK_SIZE: 500
+    CHUNK_OVERLAP: 50
+#  http:
+#    client:
+#      builder-factory: dev.langchain4j.http.client.jdk.JdkHttpClientBuilderFactory # JDK客户端
+  open-ai:
+    chat-model:
+          baseUrl: https://api.deepseek.com/v1
+          modelName: deepseek-chat
+          log-requests: true
+          log-responses: true
+  ollama:
+    embedding-model:
+          base-url: http://127.0.0.1:11434
+          model-name: qwen3-embedding-0.6b-q8
+          log-requests: true
+          log-responses: true
+  milvus:
+    host: 127.0.0.1
+    port: 19530
+    database-name: Project1
+    dimension: 1024
+    collection-name: test
+    index-type: FLAT # 索引类型（测试用FLAT即可）
+    metric-type: COSINE # 相似度计算方式（余弦相似度）
+    consistency-level: strong
+
+
+milvus:
+  host: 127.0.0.1
+  port: 19530
+  database-name: Project1
+  dimension: 1024
+  collection-name: test
+  index-type: FLAT # 索引类型（测试用FLAT即可）
+  metric-type: COSINE # 相似度计算方式（余弦相似度）
+  consistency-level: strong
 
