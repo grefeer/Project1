@@ -15,7 +15,6 @@ public class EmbeddingStoreConfig {
                 .host("localhost")
                 .port(19530)
                 .databaseName("Project1")
-                .collectionName("test")
                 .dimension(1024)
                 .indexType(IndexType.FLAT)
                 .metricType(MetricType.COSINE)

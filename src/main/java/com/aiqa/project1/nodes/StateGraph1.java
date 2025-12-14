@@ -1,7 +1,10 @@
 package com.aiqa.project1.nodes;
 
+import com.aiqa.project1.utils.MilvusFilterContentRetriever;
 import com.aiqa.project1.utils.MilvusHybridContentRetriever;
+import com.aiqa.project1.utils.MilvusQueryContentRetriever;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.http.client.spring.restclient.SpringRestClientBuilder;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
@@ -22,14 +25,14 @@ import java.util.*;
 @Component
 public class StateGraph1 implements Node{
     private final OpenAiChatModel douBaoLite;
-    private final MilvusHybridRetrieveNode milvusHybridRetrieveNode;
     private final RewriteNode rewriteNode;
     private final TranslationNode translationNode;
-    private final WebSearchNode webSearchNode;
-    private final AnswerNode answerNode;
     private final ReflectionNode reflectionNode;
     private final WebSearchContentRetriever webSearchContentRetriever;
+
+    private final MilvusFilterContentRetriever milvusFilterContentRetriever;
     private final MilvusHybridContentRetriever milvusHybridContentRetriever;
+    private final MilvusQueryContentRetriever milvusQueryContentRetriever;
 
     private final Map<ContentRetriever, String> agentsToDescription; // 只声明，不初始化
     private static final String KEYWORD_EXTRACTION_TEMPLATE = """
@@ -61,30 +64,28 @@ public class StateGraph1 implements Node{
             现在，请输出你的选择。
             """;
 
-    public StateGraph1(OpenAiChatModel douBaoLite, MilvusHybridRetrieveNode milvusHybridRetrieveNode, RewriteNode rewriteNode, TranslationNode translationNode, WebSearchNode webSearchNode, AnswerNode answerNode, ReflectionNode reflectionNode, WebSearchContentRetriever webSearchContentRetriever, MilvusHybridContentRetriever milvusHybridContentRetriever) {
+    public StateGraph1(OpenAiChatModel douBaoLite, RewriteNode rewriteNode, TranslationNode translationNode, ReflectionNode reflectionNode, WebSearchContentRetriever webSearchContentRetriever, MilvusFilterContentRetriever milvusFilterContentRetriever, MilvusHybridContentRetriever milvusHybridContentRetriever, MilvusQueryContentRetriever milvusQueryContentRetriever) {
         this.douBaoLite = douBaoLite;
-        this.milvusHybridRetrieveNode = milvusHybridRetrieveNode;
         this.rewriteNode = rewriteNode;
         this.translationNode = translationNode;
-        this.webSearchNode = webSearchNode;
+        this.milvusFilterContentRetriever = milvusFilterContentRetriever;
         this.reflectionNode = reflectionNode;
         this.webSearchContentRetriever = webSearchContentRetriever;
-        this.answerNode = answerNode;
         this.milvusHybridContentRetriever = milvusHybridContentRetriever;
+        this.milvusQueryContentRetriever = milvusQueryContentRetriever;
         this.agentsToDescription = getObjectStringMap();
     }
 
     public State run(State state) {
         try {
-
             QueryRouter queryRouter = new LanguageModelQueryRouter(douBaoLite, agentsToDescription);
-
             RetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
                     .queryRouter(queryRouter)
                     .build();
             Assistant assistant = AiServices.builder(Assistant.class)
                     .chatModel(douBaoLite)
                     .retrievalAugmentor(retrievalAugmentor)
+                    .chatMemory(state.getChatMemory())
                     .build();
 
             for (int i = 0; i < state.getMaxReflection(); i++) {
@@ -123,8 +124,9 @@ public class StateGraph1 implements Node{
 
     private Map<ContentRetriever, String> getObjectStringMap() {
         Map<ContentRetriever, String> retrieverToDescription = new LinkedHashMap<>();
-        retrieverToDescription.put(milvusHybridContentRetriever, "数据库检索器，用于从数据库中检索信息，先选择该检索器");
-        retrieverToDescription.put(webSearchContentRetriever, "网络检索器，用于从网络中检索信息，如果数据库中没有，再选用该检索器");
+        retrieverToDescription.put(milvusHybridContentRetriever, "数据库混合检索执行器，先提取关键词，然后结合向量搜索（语义）和稀疏搜索（关键词）来检索 Milvus 数据库。最常用的检索场景，适用于绝大多数复杂、开放性问题，以平衡结果的召回率和精确性。");
+        retrieverToDescription.put(milvusFilterContentRetriever, "数据库过滤检索执行器，首先从查询中提取文档名称等元数据，然后执行精确的向量搜索并强制限定在指定来源内。适用于用户明确提到了信息来源（如“在 XX 报告中...”、“关于 YY 文件”）的场景，保证答案只来自特定文档。");
+        retrieverToDescription.put(milvusQueryContentRetriever, "数据库元数据查询执行器，不进行向量相似度计算，而是基于 Milvus 中的非向量字段（如 come_from）执行精确的数据库查询。适用于需要根据文档类型、作者或特定标签等元数据进行精确筛选的场景。");
         return retrieverToDescription;
     }
 

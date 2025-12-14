@@ -223,6 +223,17 @@
         </dependency>
 
         <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+            <version>1.16.3</version> <!-- 与 langchain4j 1.9.1 兼容的稳定版本 -->
+        </dependency>
+<!--        &lt;!&ndash; Windows x64 平台专用内核支持（必须添加，否则缺少 CPU 内核） &ndash;&gt;-->
+<!--        <dependency>-->
+<!--            <groupId>com.microsoft.onnxruntime</groupId>-->
+<!--            <artifactId>onnxruntime-win-x64</artifactId>-->
+<!--            <version>1.16.3</version>-->
+<!--        </dependency>-->
+        <dependency>
             <groupId>org.bsc.langgraph4j</groupId>
             <artifactId>langgraph4j-core</artifactId>
             <version>1.7.0-beta3</version>

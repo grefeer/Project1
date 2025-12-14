@@ -367,7 +367,7 @@ public class MilvusSearchUtils {
         HashMap<String, Object> searchParamsMap = new HashMap<>();
         searchParamsMap.put("hints", "iterative_filter");
         searchParamsMap.put("ef", "50");
-
+        searchParamsMap.put("anns_field", "text_dense");
 
         String filterExpr = String.format("come_from == \"%s\"", filteredWords);
 

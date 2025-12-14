@@ -1,23 +1,24 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.worker;
 
+import com.aiqa.project1.nodes.State;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessageType;
-import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
 import dev.langchain4j.rag.content.Content;
-import dev.langchain4j.rag.content.ContentMetadata;
+import org.springframework.amqp.core.ExchangeTypes;
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 
 @Component
-public class AnswerNode implements Node{
+public class AnswerWorker {
 
     private final OpenAiChatModel douBaoLite;
     private static final String ANSWER_TEMPLATE = """
@@ -45,12 +46,19 @@ public class AnswerNode implements Node{
                 4. 如果用户要求“介绍论文”，回答必须包含论文的核心问题、提出的方法、关键创新点和主要实验结果
                 现在，请开始回答。
                 """;
+    private final RabbitTemplate rabbitTemplate;
 
-    public AnswerNode(OpenAiChatModel douBaoLite) {
+    public AnswerWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate) {
         this.douBaoLite = douBaoLite;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
-    public State run(State state) {
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue("answerWorker.queue"),
+            exchange = @Exchange(name = "answer.topic", type = ExchangeTypes.TOPIC),
+            key = "have.gathered.retrieve"
+    ))
+    public void run(State state) {
         ChatMemory chatMemory = state.getChatMemory();
         List<Content> retrievalInfo = state.getRetrievalInfo();
         String chatHistory = chatMemory.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
@@ -63,8 +71,8 @@ public class AnswerNode implements Node{
         String query = state.getQuery();
 
         String prompt = ANSWER_TEMPLATE.formatted(chatHistory, retrievalInfoText, query);
-        chatMemory.add(AiMessage.from(douBaoLite.chat(prompt)));
-
-        return state;
+        String answer = douBaoLite.chat(prompt);
+        chatMemory.add(AiMessage.from(answer));
+        rabbitTemplate.convertAndSend("reflection",state);
     }
 }

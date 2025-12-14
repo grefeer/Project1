@@ -1,8 +1,13 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.worker;
 
-import dev.langchain4j.data.message.AiMessage;
+import com.aiqa.project1.nodes.*;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-
+import org.springframework.amqp.core.ExchangeTypes;
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -13,19 +18,18 @@ import java.util.stream.Collectors;
  *
  */
 @Component
-public class StateGraph implements Node{
+public class RewriteRouteWorker {
     private final OpenAiChatModel douBaoLite;
     private final MilvusHybridRetrieveNode milvusHybridRetrieveNode;
     private final MilvusFilterRetrieveNode milvusFilterRetrieveNode;
     private final MilvusQueryRetrieveNode milvusQueryRetrieveNode;
     private final RewriteNode rewriteNode;
     private final TranslationNode translationNode;
-    private final WebSearchNode webSearchNode;
-    private final AnswerNode answerNode;
+    private final AnswerWorker answerNode;
     private final ReflectionNode reflectionNode;
-
+    private final RabbitTemplate rabbitTemplate;
     private static final FallbackStrategy fallbackStrategy = FallbackStrategy.ROUTE_TO_ALL;
-    private final Map<String, Node> agentsToDescription; // 只声明，不初始化
+    private final Map<String, String> agentsToDescription; // 只声明，不初始化
 
 
     private static final String ROUTING_TEMPLATE = """
@@ -51,26 +55,35 @@ public class StateGraph implements Node{
             现在，请输出你的选择。
             """;
 
-    public StateGraph(OpenAiChatModel douBaoLite, MilvusHybridRetrieveNode milvusHybridRetrieveNode, MilvusFilterRetrieveNode milvusFilterRetrieveNode, MilvusQueryRetrieveNode milvusQueryRetrieveNode, RewriteNode rewriteNode, TranslationNode translationNode, WebSearchNode webSearchNode, AnswerNode answerNode, ReflectionNode reflectionNode) {
+    public RewriteRouteWorker(OpenAiChatModel douBaoLite, MilvusHybridRetrieveNode milvusHybridRetrieveNode, MilvusFilterRetrieveNode milvusFilterRetrieveNode, MilvusQueryRetrieveNode milvusQueryRetrieveNode, RewriteNode rewriteNode, TranslationNode translationNode, AnswerWorker answerNode, ReflectionNode reflectionNode, RabbitTemplate rabbitTemplate) {
         this.douBaoLite = douBaoLite;
         this.milvusHybridRetrieveNode = milvusHybridRetrieveNode;
         this.milvusFilterRetrieveNode = milvusFilterRetrieveNode;
         this.milvusQueryRetrieveNode = milvusQueryRetrieveNode;
         this.rewriteNode = rewriteNode;
         this.translationNode = translationNode;
-        this.webSearchNode = webSearchNode;
         this.reflectionNode = reflectionNode;
         this.answerNode = answerNode;
+        this.rabbitTemplate = rabbitTemplate;
         this.agentsToDescription = getObjectStringMap();
     }
 
-    public State run(State state) {
+    /**
+     * 监听重写和路由队列
+     * @param state
+     */
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue("rewrite.route"),
+            exchange = @Exchange(name = "refection.direct", type = ExchangeTypes.DIRECT),
+            key = {"have.problem", "new.problem"}
+    ))
+    public void run(State state) {
         try {
             StringBuilder optionsBuilder = new StringBuilder();
             int id = 1;
-            List<Node> agentList = new ArrayList<>();
+            List<String> agentList = new ArrayList<>();
 
-            for(Map.Entry<String, Node> entry : agentsToDescription.entrySet()) {
+            for(Map.Entry<String, String> entry : agentsToDescription.entrySet()) {
 
                 if (id > 1) {
                     optionsBuilder.append("\n");
@@ -84,34 +97,27 @@ public class StateGraph implements Node{
             }
             System.out.println(agentList.getFirst().getClass().getName());
 
-            for (int i = 0; i < state.getMaxReflection(); i++) {
 
-                // 问题重写
-                state = rewriteNode.run(state);
-                String chatHistory = state.getChatMemory().messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
-                String rewrittenQuery= state.getRetrievalQuery();
+//            // 问题重写
+            state = rewriteNode.run(state);
+            String chatHistory = state.getChatMemory().messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
+            String rewrittenQuery= state.getRetrievalQuery();
 
-                // 翻译文本
-                state =  translationNode.run(state);
 
-                // 路由，决定使用哪一个智能体
-                String prompt1 = ROUTING_TEMPLATE.formatted(optionsBuilder.toString(), chatHistory, rewrittenQuery);
-                Collection<Node> matchedAgents = route(prompt1, agentList);
+//            // 翻译文本
+            state =  translationNode.run(state);
 
-                State finalState = state;
-                matchedAgents.stream()
-                        .filter(Objects::nonNull)
-                        .forEach(agent -> agent.run(finalState));
-                // 回答
-                state = answerNode.run(finalState);
+            // 路由，决定使用哪一个智能体
+            String prompt1 = ROUTING_TEMPLATE.formatted(optionsBuilder.toString(), chatHistory, rewrittenQuery);
+            Collection<String> matchedAgents = route(prompt1, agentList);
 
-                // 质检
-                state = reflectionNode.run(state);
-                AiMessage reflectionMessage = (AiMessage)(state.getChatMemory().messages().getLast());
-                if (reflectionMessage.text().equals("无")) break;
-            }
+            rabbitTemplate.convertAndSend("Retrieve", "gather.retrieve", matchedAgents.size()); // 注意并发问题，建议带上 ID
+            State finalState = state;
+            matchedAgents.stream()
+                    .filter(Objects::nonNull)
+                    .forEach(s -> rabbitTemplate.convertAndSend("Retrieve", s + ".retrieve", finalState));
 
-            return state;
+
         } catch (Exception e) {
             System.err.println("StateGraph处理异常: " + e.getMessage());
             throw new RuntimeException(e);
@@ -125,7 +131,9 @@ public class StateGraph implements Node{
         FAIL;
     }
 
-    public Collection<Node> route(String query, List<Node> agentList) {
+
+
+    public Collection<String> route(String query, List<String> agentList) {
         try {
             String response = douBaoLite.chat(query);
             // 验证响应格式
@@ -144,8 +152,8 @@ public class StateGraph implements Node{
     }
 
 
-    protected Collection<Node> fallback(Exception e) {
-        Collection<Node> nodes;
+    protected Collection<String> fallback(Exception e) {
+        Collection<String> nodes;
         switch (fallbackStrategy) {
             case DO_NOT_ROUTE -> nodes = Collections.emptyList();
             case ROUTE_TO_ALL -> nodes = new ArrayList<>(this.agentsToDescription.values());
@@ -155,7 +163,7 @@ public class StateGraph implements Node{
     }
 
 
-    protected Collection<Node> parse(String choices, List<Node> agentList) {
+    protected Collection<String> parse(String choices, List<String> agentList) {
         // 1. 过滤空字符串，避免分割出空元素
         if (choices == null || choices.trim().isEmpty()) {
             return Collections.emptyList();
@@ -187,11 +195,11 @@ public class StateGraph implements Node{
         }
     }
 
-    private Map<String, Node> getObjectStringMap() {
-        Map<String, Node> retrieverToDescription = new LinkedHashMap<>();
-        retrieverToDescription.put("数据库混合检索执行器，先提取关键词，然后结合向量搜索（语义）和稀疏搜索（关键词）来检索 Milvus 数据库。最常用的检索场景，适用于绝大多数复杂、开放性问题，以平衡结果的召回率和精确性。", milvusHybridRetrieveNode);
-        retrieverToDescription.put("数据库过滤检索执行器，首先从查询中提取文档名称等元数据，然后执行精确的向量搜索并强制限定在指定来源内。适用于用户明确提到了信息来源（如“在 XX 报告中...”、“关于 YY 文件”）的场景，保证答案只来自特定文档。", milvusFilterRetrieveNode);
-        retrieverToDescription.put("数据库元数据查询执行器，不进行向量相似度计算，而是基于 Milvus 中的非向量字段（如 come_from）执行精确的数据库查询。适用于需要根据文档类型、作者或特定标签等元数据进行精确筛选的场景。", milvusQueryRetrieveNode);
+    private Map<String, String> getObjectStringMap() {
+        Map<String, String> retrieverToDescription = new LinkedHashMap<>();
+        retrieverToDescription.put("数据库混合检索执行器，先提取关键词，然后结合向量搜索（语义）和稀疏搜索（关键词）来检索 Milvus 数据库。最常用的检索场景，适用于绝大多数复杂、开放性问题，以平衡结果的召回率和精确性。", MilvusRetrieverName.HYBRID_RETRIEVER.getClassName());
+        retrieverToDescription.put("数据库过滤检索执行器，首先从查询中提取文档名称等元数据，然后执行精确的向量搜索并强制限定在指定来源内。适用于用户明确提到了信息来源（如“在 XX 报告中...”、“关于 YY 文件”）的场景，保证答案只来自特定文档。", MilvusRetrieverName.FILTER_RETRIEVER.getClassName());
+        retrieverToDescription.put("数据库元数据查询执行器，不进行向量相似度计算，而是基于 Milvus 中的非向量字段（如 come_from）执行精确的数据库查询。适用于需要根据文档类型、作者或特定标签等元数据进行精确筛选的场景。", MilvusRetrieverName.QUERY_RETRIEVER.getClassName());
 //        retrieverToDescription.put("网络检索节点，用于从网络中检索信息，先使用数据库节点，如果数据库中没有相关信息，再考虑选用该节点", webSearchNode);
 
         return retrieverToDescription;

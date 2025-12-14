@@ -1,6 +1,8 @@
 package com.aiqa.project1.config;
 
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -10,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitConfig {
 
     // exchange
-    public final static String DEFAULT_EXCHANGE = "project1.fount";
+//    public final static String DEFAULT_EXCHANGE = "project1.fount";
 
     public final static String DIRECT_EXCHANGE = "project1.direct";
 
@@ -22,17 +24,17 @@ public class RabbitConfig {
     public final static String DEFAULT_ROUTING_KEY = "routing.key.fount";
 
 
-    /**
-     * 声明注册 fanout 模式的交换机
-     *
-     * @return 交换机
-     */
-    @Bean
-    public FanoutExchange defalutFanoutExchange() {
-        // durable:是否持久化,默认是false
-        // autoDelete:是否自动删除
-        return new FanoutExchange(DEFAULT_EXCHANGE, true, false);
-    }
+//    /**
+//     * 声明注册 fanout 模式的交换机
+//     *
+//     * @return 交换机
+//     */
+//    @Bean
+//    public FanoutExchange defalutFanoutExchange() {
+//        // durable:是否持久化,默认是false
+//        // autoDelete:是否自动删除
+//        return new FanoutExchange(DEFAULT_EXCHANGE, true, false);
+//    }
 
     /**
      * 声明注册 direct 模式的交换机
@@ -71,14 +73,22 @@ public class RabbitConfig {
         return new Queue(DEFAULT_QUEUE, true);
     }
 
+//    /**
+//     * 声明绑定交换机与队列
+//     *
+//     * @return Binding
+//     */
+//    @Bean
+//    public Binding defaultBinding() {
+//        return BindingBuilder.bind(defaultQueue()).to(defalutFanoutExchange());
+//    }
+
     /**
-     * 声明绑定交换机与队列
-     *
-     * @return Binding
+     * 声明之后rabbitmq自动将对象转化为json发送，以及将接收的json转换为对象
+     * @return
      */
     @Bean
-    public Binding defaultBinding() {
-        return BindingBuilder.bind(defaultQueue()).to(defalutFanoutExchange());
+    public MessageConverter defaultMessageConverter() {
+        return new Jackson2JsonMessageConverter();
     }
-
 }
