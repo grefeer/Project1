@@ -18,5 +18,6 @@ public class State {
     private List<Content> retrievalInfo;
     private String query;
     private Integer maxReflection = 3;
+    private Integer maxRetrievalCount = 1000;
     private String retrievalQuery;
 }

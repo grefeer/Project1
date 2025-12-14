@@ -111,7 +111,8 @@ public class RewriteRouteWorker {
             String prompt1 = ROUTING_TEMPLATE.formatted(optionsBuilder.toString(), chatHistory, rewrittenQuery);
             Collection<String> matchedAgents = route(prompt1, agentList);
 
-            rabbitTemplate.convertAndSend("Retrieve", "gather.retrieve", matchedAgents.size()); // 注意并发问题，建议带上 ID
+            // 统计使用了几个检索器，方便后续合并检索信息
+            state.setMaxRetrievalCount(matchedAgents.size());
             State finalState = state;
             matchedAgents.stream()
                     .filter(Objects::nonNull)

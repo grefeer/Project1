@@ -14,24 +14,12 @@ import org.springframework.stereotype.Component;
 public class GatherWorker {
 
     private final RabbitTemplate rabbitTemplate;
-    private int retrieveNumber = 0;
-    private int receievedRetrieveNumber = 0;
     private State state = null;
 
     public GatherWorker(RabbitTemplate rabbitTemplate) {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    @RabbitListener(bindings = {
-            @QueueBinding(
-                    value = @Queue("gather"),
-                    exchange = @Exchange(value = "Retrieve", type = ExchangeTypes.DIRECT),
-                    key = "gather.retrieve"
-            )
-    })
-    public void receiveRetrieverNumber(Integer retrieveNumber) {
-        this.retrieveNumber = retrieveNumber;
-    }
 
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue("gather"),
@@ -39,13 +27,22 @@ public class GatherWorker {
             key = "*.retrieve"
     ))
     public void receiveRetrieveResult(State state) {
-        receievedRetrieveNumber++;
-        // TODO 储存逻辑
+
+        // TODO 储存逻辑,state的检索器数量以及检索信息需要共享，GatherWorker必须是无状态的，如果保存了state，就是有状态的节点了，
+        //  所以不能在GatherWorker中保存状态，只能在radis中保存，可以借助langchain4j的永久固化记忆章节
+
         if (this.state == null) {
             this.state = state;
         } else {
             this.state.getRetrievalInfo().addAll(state.getRetrievalInfo());
         }
-        rabbitTemplate.convertAndSend("answer.topic", "have.gathered.retrieve", state);
+        // 未完成检索的检索器数量-1，判断是否为0（是否完成检索）
+        int maxRetrievalCount = state.getMaxRetrievalCount() - 1;
+        if (maxRetrievalCount <= 0) {
+            rabbitTemplate.convertAndSend("answer.topic", "have.gathered.retrieve", state);
+            return;
+        } else {
+            state.setMaxRetrievalCount(maxRetrievalCount);
+        }
     }
 }
