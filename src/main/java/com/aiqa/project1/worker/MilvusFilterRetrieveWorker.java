@@ -5,6 +5,8 @@ import com.aiqa.project1.nodes.State;
 import com.aiqa.project1.utils.MilvusFilterContentRetriever;
 import com.aiqa.project1.utils.MilvusFilterRetriever;
 import com.aiqa.project1.utils.MilvusQueryContentRetriever;
+import com.aiqa.project1.utils.RedisStoreUtils;
+import com.alibaba.fastjson.JSON;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
@@ -32,11 +34,13 @@ public class MilvusFilterRetrieveWorker {
             例如：
             2106.09685v2.pdf
             """;
+    private final RedisStoreUtils redisStoreUtils;
 
-    public MilvusFilterRetrieveWorker(OpenAiChatModel douBaoLite, MilvusFilterRetriever milvusFilterRetriever, MilvusQueryContentRetriever milvusQueryContentRetriever, MilvusFilterContentRetriever milvusFilterContentRetriever, RabbitTemplate rabbitTemplate) {
+    public MilvusFilterRetrieveWorker(OpenAiChatModel douBaoLite, MilvusFilterRetriever milvusFilterRetriever, MilvusQueryContentRetriever milvusQueryContentRetriever, MilvusFilterContentRetriever milvusFilterContentRetriever, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
         this.milvusFilterRetriever = milvusFilterRetriever;
         this.rabbitTemplate = rabbitTemplate;
+        this.redisStoreUtils = redisStoreUtils;
     }
 
     @RabbitListener(bindings = @QueueBinding(
@@ -52,8 +56,11 @@ public class MilvusFilterRetrieveWorker {
 
         String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
         String keywords = douBaoLite.chat(prompt1);
+        List<Content> retrievalInformation = milvusFilterRetriever.retrieveTopK10(userId, keywords, Query.from(query));
+        retrievalInfo.addAll(retrievalInformation);
 
-        retrievalInfo.addAll(milvusFilterRetriever.retrieveTopK10(userId, keywords, Query.from(query)));
+        redisStoreUtils.setRetrievalInfo(state.getUserId(), 0, "MilvusFilterRetrieveWorker", JSON.toJSONString(retrievalInformation));
+
         rabbitTemplate.convertAndSend("gather.topic", "MilvusFilterRetrieveWorker.retrieve", state);
 
     }

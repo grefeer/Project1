@@ -3,6 +3,8 @@ package com.aiqa.project1.worker;
 import com.aiqa.project1.nodes.Node;
 import com.aiqa.project1.nodes.State;
 import com.aiqa.project1.utils.MilvusQueryRetriever;
+import com.aiqa.project1.utils.RedisStoreUtils;
+import com.alibaba.fastjson.JSON;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
@@ -30,12 +32,13 @@ public class MilvusQueryRetrieveWorker {
             用户查询：%s
             至关重要的是，关键词之间用英文逗号间隔开，并且你只需提供三个关键词，其他内容一概不要！不要在关键词前后添加任何内容！
             """;
+    private final RedisStoreUtils redisStoreUtils;
 
-    public MilvusQueryRetrieveWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, MilvusQueryRetriever milvusQueryRetriever) {
+    public MilvusQueryRetrieveWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, MilvusQueryRetriever milvusQueryRetriever, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
         this.rabbitTemplate = rabbitTemplate;
         this.milvusQueryRetriever = milvusQueryRetriever;
-
+        this.redisStoreUtils = redisStoreUtils;
     }
 
     @RabbitListener(bindings = @QueueBinding(
@@ -56,7 +59,13 @@ public class MilvusQueryRetrieveWorker {
         List<String> KeywordsList = new ArrayList<>();
         Collections.addAll(KeywordsList, keywords.split(","));
 
-        retrievalInfo.addAll(milvusQueryRetriever.retrieve(userId, KeywordsList, true, Query.from(query)));
+
+        List<Content> retrievalInformation = milvusQueryRetriever.retrieve(userId, KeywordsList, true, Query.from(query));
+        retrievalInfo.addAll(retrievalInformation);
+
+        redisStoreUtils.setRetrievalInfo(state.getUserId(), 0, "MilvusQueryRetrieveWorker", JSON.toJSONString(retrievalInformation));
+
+
         rabbitTemplate.convertAndSend("gather.topic", "MilvusQueryRetrieveWorker.retrieve", state);
     }
 }
