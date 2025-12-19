@@ -1,11 +1,17 @@
 package com.aiqa.project1.config;
 
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.ExecutorService;
 
 
 @Configuration
@@ -90,5 +96,22 @@ public class RabbitConfig {
     @Bean
     public MessageConverter defaultMessageConverter() {
         return new Jackson2JsonMessageConverter();
+    }
+
+
+    @Autowired
+    @Qualifier("qaTaskExecutor")
+    ExecutorService executor;
+
+    @Bean("customContainerFactory")
+    public SimpleRabbitListenerContainerFactory containerFactory(SimpleRabbitListenerContainerFactoryConfigurer configurer,
+                                                                 ConnectionFactory connectionFactory) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setTaskExecutor(executor);
+        factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
+        factory.setConcurrentConsumers(5);
+        factory.setMaxConcurrentConsumers(10);
+        configurer.configure(factory, connectionFactory);
+        return factory;
     }
 }

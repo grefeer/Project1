@@ -50,23 +50,25 @@ public class DocsController {
 
     @PostMapping("/upload")
     public Result upload(@RequestParam("file") MultipartFile file,
+                         @RequestParam("sessionId") String sessionId,
                          @RequestParam(required = false) String documentName,
                          @RequestParam(required = false) String description,
                          @RequestHeader("Authorization") String token) {
         String userId = JwtUtils.getUserIdFromToken(token);
 
-        return docsService.uploadSingleDocument(file, description, userId);
+        return docsService.uploadSingleDocument(file, description, userId, sessionId);
 
     }
 
     @PostMapping("/batch-upload")
     public Result upload(@RequestParam("files") List<MultipartFile> files,
+                         @RequestParam("sessionId") String sessionId,
 //                         @RequestParam(name = "documentNames", required = false) List<String> documentNames,
                          @RequestHeader("Authorization") String token) {
         String userId = JwtUtils.getUserIdFromToken(token);
         Result resp = null;
         try {
-            resp = docsService.uploadMultiDocuments(files, userId);
+            resp = docsService.uploadMultiDocuments(files, userId, sessionId);
 
         } catch (BusinessException e) {
             resp = new Result(e.getCode(), e.getMessage(), e.getData());
@@ -119,7 +121,7 @@ public class DocsController {
         return docsService.downloadSingleDocument(documentId, version, request, response);
     }
 
-    @DeleteMapping("{documentId}")
+    @DeleteMapping("/delete/{documentId}")
     public Result deleteDocument(@PathVariable String documentId, HttpServletRequest request) {
         return docsService.deleteSingleDocument(documentId, request);
     }

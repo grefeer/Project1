@@ -2,6 +2,7 @@ package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.Node;
 import com.aiqa.project1.nodes.State;
+import com.aiqa.project1.utils.RedisStoreUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -38,15 +39,17 @@ public class ReflectionWorker {
                 请确保你的判断客观、精准，改进建议具有可操作性。无需额外解释，直接输出结果即可。
                 """;
     private final RabbitTemplate rabbitTemplate;
+    private final RedisStoreUtils redisStoreUtils;
 
-    public ReflectionWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate) {
+    public ReflectionWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
         this.rabbitTemplate = rabbitTemplate;
+        this.redisStoreUtils = redisStoreUtils;
     }
 
-    @RabbitListener(queuesToDeclare = @Queue("reflection"))
+    @RabbitListener(queuesToDeclare = @Queue(value = "reflection", durable = "true"))
     public void run(State state) {
-        String answer = state.getChatMemory().messages().getLast().toString();
+        String answer = redisStoreUtils.getLastChatMemory(state.getUserId(), state.getSessionId());
         String query1 = douBaoLite.chat(REFLECTION_TEMPLATE.formatted(state.getQuery(), answer));
         // 1.检查回答是否合格，或者是否达到最大迭代次数
         if (query1.equals("无") || state.getMaxReflection() <= 0) {
@@ -55,14 +58,21 @@ public class ReflectionWorker {
         }
         // 2. 递减次数，继续循环
         state.setMaxReflection(state.getMaxReflection() - 1);
-        state.getChatMemory().add(AiMessage.from("""
-                    用户可能会有以下方面的需求，请根据此需求和问题重新回答：
-                    
-                    <需求>
-                    %s
-                    </需求>
-                    
-                    """.formatted(query1)));
+        redisStoreUtils.setChatMemory(
+                state.getUserId(),
+                state.getSessionId(),
+                """
+                <系统改进建议>
+                用户可能会有以下方面的需求，请根据此需求和问题重新回答：
+                <需求>
+                %s
+                </需求>
+                </系统改进建议>
+                """.formatted(query1)
+        );
+
+        // 可能当前的检索的数据库中没有相关数据，换一种检索方法（数据库->网络 or 网络->数据库）
+        state.setRetrievalDBFlag(! state.getRetrievalDBFlag());
 
         rabbitTemplate.convertAndSend("refection.direct", "have.problem", state);
     }

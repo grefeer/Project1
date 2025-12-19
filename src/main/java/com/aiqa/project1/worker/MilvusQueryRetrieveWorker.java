@@ -8,6 +8,7 @@ import com.alibaba.fastjson.JSON;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -17,8 +18,10 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @Component
@@ -28,9 +31,11 @@ public class MilvusQueryRetrieveWorker {
 
     private final MilvusQueryRetriever milvusQueryRetriever;
     private static final String KEYWORD_EXTRACTION_TEMPLATE = """
-            给定以下查询，你的任务是提取出三个最能代表该查询的关键词。
+            给定以下查询，你的任务是提取出该问题所在的文档名称。
             用户查询：%s
-            至关重要的是，关键词之间用英文逗号间隔开，并且你只需提供三个关键词，其他内容一概不要！不要在关键词前后添加任何内容！
+            至关重要的是，只需要输出文章名称，不需要输出其他字符，如果有多个文章，中间用英文逗号隔开，其他内容一概不要！不要在关键词前后添加任何内容！
+            例如：
+            2106.09685v2.pdf
             """;
     private final RedisStoreUtils redisStoreUtils;
 
@@ -42,30 +47,53 @@ public class MilvusQueryRetrieveWorker {
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue("MilvusQueryRetrieveWorker.retrieve"),
+            value = @Queue(value = "MilvusQueryRetrieveWorker.retrieve", durable = "true"),
             exchange = @Exchange(value = "Retrieve", type = ExchangeTypes.DIRECT),
             key = "MilvusQueryRetrieveWorker.retrieve"
     ))
     public void run(State state) {
 
-        Integer userId = state.getUserId();
-        List<Content> retrievalInfo = state.getRetrievalInfo();
-        String query = state.getRetrievalQuery();
+        try {
+            Integer userId = state.getUserId();
+            String query = state.getRetrievalQuery();
 
-        String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
-        String keywords = douBaoLite.chat(prompt1);
+            String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
+            String keywords = douBaoLite.chat(prompt1);
 
 //        List<String> threadSafeKeywordsList = Collections.synchronizedList(new ArrayList<>()); 消息队列异步并行处理消息，无需synchronizedList
-        List<String> KeywordsList = new ArrayList<>();
-        Collections.addAll(KeywordsList, keywords.split(","));
+            List<String> KeywordsList = new ArrayList<>();
+//            Collections.addAll(KeywordsList, keywords.split(",")); 多文档名切分时，可能会将空格切分到文档名中
+            Arrays.stream(keywords.split(",")).map(String::trim).forEach(KeywordsList::add);
+
+            List<Content> retrievalInformation = milvusQueryRetriever.retrieve(userId, KeywordsList, true, Query.from(query));
+
+            System.out.println(KeywordsList);
+            System.out.println("----------------------------------");
+            retrievalInformation.forEach(System.out::println);
+            System.out.println("----------------------------------");
+
+            redisStoreUtils.setRetrievalInfo(
+                    userId,
+                    state.getSessionId(),
+                    state.getMemoryId(),
+                    "Retrieve",
+                    retrievalInformation
+                            .stream()
+                            .map(content -> "<MilvusQueryRetrieveWorker检索结果>" + content.toString() + "</MilvusQueryRetrieveWorker检索结果>")
+                            .collect(Collectors.toList())
+            );
 
 
-        List<Content> retrievalInformation = milvusQueryRetriever.retrieve(userId, KeywordsList, true, Query.from(query));
-        retrievalInfo.addAll(retrievalInformation);
-
-        redisStoreUtils.setRetrievalInfo(state.getUserId(), 0, "MilvusQueryRetrieveWorker", JSON.toJSONString(retrievalInformation));
-
-
-        rabbitTemplate.convertAndSend("gather.topic", "MilvusQueryRetrieveWorker.retrieve", state);
+            rabbitTemplate.convertAndSend("gather.topic", "MilvusQueryRetrieveWorker.retrieve", state);
+        } catch (AmqpException e) {
+            e.printStackTrace();
+            System.out.println("fuck");
+            // 出现错误，直接返回
+            try {
+                rabbitTemplate.convertAndSend("gather.topic", "MilvusQueryRetrieveWorker.retrieve", state);
+            } catch (AmqpException ex) {
+                throw new RuntimeException("rabbitmq异常，具体发生在MilvusQueryRetrieveWorker向gather.topic发送消息的过程中",ex);
+            }
+        }
     }
 }

@@ -11,14 +11,14 @@ public enum MilvusRetrieverName {
     FILTER_RETRIEVER(MilvusFilterRetrieveWorker.class),
 
     // 3. 查询检索节点：基于元数据进行精确查询（非向量搜索）
-    QUERY_RETRIEVER(MilvusQueryRetrieveWorker.class);
+    QUERY_RETRIEVER(MilvusQueryRetrieveWorker.class),
+
+    WEB_SEARCH_RETRIEVER(WebSearchWorker.class);
 
     private final String className;
-    private final Class<?> clazz;
 
     MilvusRetrieverName(Class<?> clazz) {
         this.className = clazz.getSimpleName();
-        this.clazz = clazz;
     }
 
     /**
@@ -29,11 +29,4 @@ public enum MilvusRetrieverName {
         return className;
     }
 
-    /**
-     * 获取节点类
-     * @return 节点类
-     */
-    public Class<?> getClazz() {
-        return clazz;
-    }
 }

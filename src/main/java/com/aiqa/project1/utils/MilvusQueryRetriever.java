@@ -29,15 +29,15 @@ public class MilvusQueryRetriever {
         try {
             if (filteredWords instanceof String ) {
                 if (equalFlag) {
-                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, filteredWords.toString(), List.of("come_from"));
+                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
                 } else {
-                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, filteredWords.toString(), List.of("come_from"));
+                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
                 }
 
             } else if (filteredWords instanceof List) {
                 List<String> filteredWordsList = new ArrayList<>();
                 ((List<?>) filteredWords).forEach(word -> filteredWordsList.add(word.toString()));
-                queryResp= milvusSearchUtils.filterByComeFromIn(userId, filteredWordsList, List.of("come_from"));
+                queryResp= milvusSearchUtils.filterByComeFromIn(userId, filteredWordsList, List.of("come_from", "text", "title", "author"));
             }
             else {
                 throw new RuntimeException("MilvusContentRetriever requires filtered words");

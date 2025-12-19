@@ -13,11 +13,11 @@ public class RedisTest {
 
     @Test
     public void test() {
-        redisStoreUtils.putRetrievalCount(0,0,3);
-        redisStoreUtils.putRetrievalCount(0,1,3);
-        redisStoreUtils.decreaseRetrievalCount(0,1);
+        redisStoreUtils.putRetrievalCount(0,0,0,3);
+        redisStoreUtils.putRetrievalCount(0,1,0,3);
+        redisStoreUtils.decreaseRetrievalCount(0,0,1);
 
-        System.out.println(redisStoreUtils.getRetrievalCount(0, 0));
-        System.out.println(redisStoreUtils.getRetrievalCount(0, 1));
+        System.out.println(redisStoreUtils.getRetrievalCount(0, 0,0));
+        System.out.println(redisStoreUtils.getRetrievalCount(0, 1,0));
     }
 }

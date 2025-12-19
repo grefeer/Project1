@@ -21,8 +21,10 @@ import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.request.ranker.BaseRanker;
 import io.milvus.v2.service.vector.request.ranker.RRFRanker;
 import io.milvus.v2.service.vector.request.ranker.WeightedRanker;
+import io.milvus.v2.service.vector.response.DeleteResp;
 import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -36,7 +38,7 @@ public class MilvusSearchUtils {
     @Value("${milvus.collection-name}")
     private String collectionName;
 
-    public MilvusSearchUtils(MilvusClientV2 milvusClient, EmbeddingModel onnxMiniLML12V2EmbeddingModel) {
+    public MilvusSearchUtils(MilvusClientV2 milvusClient, @Qualifier("bgeM3") EmbeddingModel onnxMiniLML12V2EmbeddingModel) {
         this.milvusClient = milvusClient;
         this.onnxMiniLML12V2EmbeddingModel = onnxMiniLML12V2EmbeddingModel;
     }
@@ -45,8 +47,8 @@ public class MilvusSearchUtils {
      * 再milvus中创建collection
      * @param userId
      */
-    public void createMilvusCollection(Integer userId) {
-        String userCollectionName = collectionName + "_" +userId.toString();
+    public void createMilvusCollection(String userId) {
+        String userCollectionName = collectionName + "_" + userId;
         HasCollectionReq hasCollectionReq = HasCollectionReq.builder()
                 .collectionName(userCollectionName)
                 .build();
@@ -105,7 +107,7 @@ public class MilvusSearchUtils {
         schema.addField(AddFieldReq.builder()
                 .fieldName("text_dense")
                 .dataType(DataType.FloatVector)
-                .dimension(384)
+                .dimension(1024)
                 .build());
 
         schema.addField(AddFieldReq.builder()
@@ -174,6 +176,8 @@ public class MilvusSearchUtils {
             if (texts instanceof String text) {
                 JsonObject row = new JsonObject();
                 row.addProperty("text", text);
+                row.addProperty("title", "text");
+
                 float[] text_dense1 = onnxMiniLML12V2EmbeddingModel.embed(text).content().vector();
                 row.add("text_dense", gson.toJsonTree(text_dense1));
                 insertReq = InsertReq.builder()
@@ -186,6 +190,7 @@ public class MilvusSearchUtils {
                     JsonObject row = new JsonObject();
                     String text_ = (String) text;
                     row.addProperty("text", text_);
+                    row.addProperty("title", "text");
                     float[] text_dense1 = onnxMiniLML12V2EmbeddingModel.embed(text_).content().vector();
                     row.add("text_dense", gson.toJsonTree(text_dense1));
                     data.add(row);
@@ -284,7 +289,6 @@ public class MilvusSearchUtils {
                                            List<String> outputFields) throws Exception {
         // 构建过滤表达式：字符串需用双引号包裹
         String filterExpr = String.format("come_from == \"%s\"", targetValue);
-
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .filter(filterExpr)
@@ -314,6 +318,8 @@ public class MilvusSearchUtils {
             }
         }
         String filterExpr = String.format("come_from in [%s]", valuesStr);
+
+        System.out.println("filterExpr:" + filterExpr);
 
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
@@ -376,10 +382,24 @@ public class MilvusSearchUtils {
                 .data(queryVector)
                 .topK(topK)
                 .filter(filterExpr) // 详见https://milvus.io/docs/zh/boolean.md
-                .outputFields(Arrays.asList("text", "come_from"))
+                .outputFields(Arrays.asList("text", "come_from", "title", "author"))
                 .searchParams(searchParamsMap)
                 .build();
         return milvusClient.search(searchReq);
+    }
+
+    public Boolean deleteDocumentEmbeddingsByName(String documentName, String userId) {
+
+        DeleteReq deleteReq = DeleteReq.builder()
+                .collectionName(collectionName + "_" + userId)
+                .filter("come_from == \"" + documentName + "\"")
+                .build();
+        try {
+            DeleteResp deleteResp = milvusClient.delete(deleteReq);
+            return deleteResp.getDeleteCnt() > 0;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
 
@@ -485,4 +505,5 @@ public class MilvusSearchUtils {
 
         return contents;
     }
+
 }

@@ -5,28 +5,23 @@ import dev.langchain4j.data.document.DocumentParser;
 
 import dev.langchain4j.data.document.parser.TextDocumentParser;
 
-import dev.langchain4j.data.document.parser.apache.pdfbox.ApachePdfBoxDocumentParser;
-import dev.langchain4j.data.document.parser.apache.poi.ApachePoiDocumentParser;
 import dev.langchain4j.data.document.parser.apache.tika.ApacheTikaDocumentParser;
+import dev.langchain4j.data.document.parser.apache.poi.ApachePoiDocumentParser;
 
 import org.jsoup.Jsoup;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.InputStream;
+import java.io.*;
 
 /**
  * 文本提取工具类
  */
 public class TextExtractUtil {
     // 提取本地文档文本（PDF/Word/Txt）
-    public static Document extractLocalDocument(File file) throws FileNotFoundException {
+    public static Document extractLocalDocument(MultipartFile file) throws IOException {
         DocumentParser parser;
         String fileName = file.getName().toLowerCase();
-        if (fileName.endsWith(".pdf")) {
-            parser =  new ApachePdfBoxDocumentParser();
-        } else if (
+        if (
                 fileName.endsWith(".docx") || fileName.endsWith(".doc") ||
                 fileName.endsWith(".ppt") || fileName.endsWith(".pptx") ||
                 fileName.endsWith(".xls") || fileName.endsWith(".xlsx")
@@ -38,9 +33,8 @@ public class TextExtractUtil {
             parser = new ApacheTikaDocumentParser();
         }
 
-        InputStream is = new FileInputStream(file);
-        Document document = parser.parse(is);
-        return document;
+        InputStream is = file.getInputStream();
+        return parser.parse(is);
     }
 
     // 提取HTML正文（去除标签、广告）

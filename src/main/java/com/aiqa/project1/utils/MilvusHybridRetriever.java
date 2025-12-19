@@ -45,4 +45,12 @@ public class MilvusHybridRetriever {
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
+    public List<Content> retrieveTopK5WithRRF(Integer userId, String keywords, Query query) {
+        if (userId == null || keywords == null) {
+            throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
+        }
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, 5, 60);
+        return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
+    }
+
 }

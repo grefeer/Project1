@@ -1,6 +1,8 @@
 package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.*;
+import com.aiqa.project1.utils.RedisStoreUtils;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -20,13 +22,8 @@ import java.util.stream.Collectors;
 @Component
 public class RewriteRouteWorker {
     private final OpenAiChatModel douBaoLite;
-    private final MilvusHybridRetrieveNode milvusHybridRetrieveNode;
-    private final MilvusFilterRetrieveNode milvusFilterRetrieveNode;
-    private final MilvusQueryRetrieveNode milvusQueryRetrieveNode;
     private final RewriteNode rewriteNode;
     private final TranslationNode translationNode;
-    private final AnswerWorker answerNode;
-    private final ReflectionNode reflectionNode;
     private final RabbitTemplate rabbitTemplate;
     private static final FallbackStrategy fallbackStrategy = FallbackStrategy.ROUTE_TO_ALL;
     private final Map<String, String> agentsToDescription; // 只声明，不初始化
@@ -51,21 +48,46 @@ public class RewriteRouteWorker {
             你的任务是从上述节点中选择检索相关信息的最合适数据源（只有问题十分复杂时才能多选）。请遵循以下规则：
             1. 若历史对话中已使用数据库检索节点但未找到结果，优先选择网络检索节点。
             2. 仅返回节点对应的数字编号，多个编号用逗号分隔，不得包含其他内容。
-            
             现在，请输出你的选择。
             """;
+    private final String TRANSLATION_TEMPLATE = """
+                请将以下文本准确翻译成其他的语言，仅返回翻译结果，不添加任何额外内容：
+                <文本>
+                %s
+                </文本>
+                要求：
+                1、如果是文本语言是中文，将其翻译为英文；
+                2、如果是文本语言是英文，将其翻译为中文；
+                现在，请按照要求翻译文本。
+                """;
+    private static final String QUERY_REWRITING_TEMPLATE = """
+            你的任务是根据提供的历史对话和后续用户查询，生成一个简洁、独立的综合查询。该查询需完整融入历史对话的上下文信息，清晰保持用户的原始意图，且无需依赖额外背景即可理解。
+            首先，请阅读以下历史对话：
+            <历史对话>
+            %s
+            </历史对话>
+            接下来，请阅读用户的后续查询：
+            <用户查询>
+            %s
+            </用户查询>
+            请严格按照以下要求生成综合查询：
+            1. 必须包含历史对话中的关键上下文信息
+            2. 必须准确反映用户的核心需求和意图
+            3. 表述需清晰、具体，避免模糊
+            4. 生成的查询需独立完整，无需参考原始对话即可理解
+            5. 保持简洁，避免冗余信息，必须少于100词
+            至关重要的是，你只需输出重新表述后的独立查询文本，不得添加任何额外说明、解释或格式标记！
+            """;
 
-    public RewriteRouteWorker(OpenAiChatModel douBaoLite, MilvusHybridRetrieveNode milvusHybridRetrieveNode, MilvusFilterRetrieveNode milvusFilterRetrieveNode, MilvusQueryRetrieveNode milvusQueryRetrieveNode, RewriteNode rewriteNode, TranslationNode translationNode, AnswerWorker answerNode, ReflectionNode reflectionNode, RabbitTemplate rabbitTemplate) {
+    private final RedisStoreUtils redisStoreUtils;
+
+    public RewriteRouteWorker(OpenAiChatModel douBaoLite, RewriteNode rewriteNode, TranslationNode translationNode, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
-        this.milvusHybridRetrieveNode = milvusHybridRetrieveNode;
-        this.milvusFilterRetrieveNode = milvusFilterRetrieveNode;
-        this.milvusQueryRetrieveNode = milvusQueryRetrieveNode;
         this.rewriteNode = rewriteNode;
         this.translationNode = translationNode;
-        this.reflectionNode = reflectionNode;
-        this.answerNode = answerNode;
         this.rabbitTemplate = rabbitTemplate;
         this.agentsToDescription = getObjectStringMap();
+        this.redisStoreUtils = redisStoreUtils;
     }
 
     /**
@@ -73,7 +95,7 @@ public class RewriteRouteWorker {
      * @param state
      */
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue("rewrite.route"),
+            value = @Queue(value = "rewrite.route", durable = "true"),
             exchange = @Exchange(name = "refection.direct", type = ExchangeTypes.DIRECT),
             key = {"have.problem", "new.problem"}
     ))
@@ -97,26 +119,46 @@ public class RewriteRouteWorker {
             }
             System.out.println(agentList.getFirst().getClass().getName());
 
+            // 问题重写
+            String chatHistory = redisStoreUtils.getChatMemory(state.getUserId(), state.getSessionId(), 5).stream().map(Object::toString).collect(Collectors.joining("\n"));
+            String rewritePrompt = QUERY_REWRITING_TEMPLATE.formatted(chatHistory, state.getQuery());
+            String rewriteQuery = douBaoLite.chat(rewritePrompt);
+            state.setRetrievalQuery(rewriteQuery);
 
-//            // 问题重写
-            state = rewriteNode.run(state);
-            String chatHistory = state.getChatMemory().messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
-            String rewrittenQuery= state.getRetrievalQuery();
 
+            // 翻译问题
+            String translationPrompt = TRANSLATION_TEMPLATE.formatted(rewriteQuery);
+            String translatedSentence = douBaoLite.chat(translationPrompt);
 
-//            // 翻译文本
-            state =  translationNode.run(state);
+            rewriteQuery = rewriteQuery + "(%s)".formatted(translatedSentence);
+            state.setRetrievalQuery(rewriteQuery);
 
             // 路由，决定使用哪一个智能体
-            String prompt1 = ROUTING_TEMPLATE.formatted(optionsBuilder.toString(), chatHistory, rewrittenQuery);
+            String prompt1 = ROUTING_TEMPLATE.formatted(
+                    optionsBuilder.toString(),
+                    chatHistory,
+                    rewriteQuery
+            );
+            if (! state.getRetrievalDBFlag()) {
+                Boolean ifExistence =  redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), 1);
+                rabbitTemplate.convertAndSend("Retrieve", "WebSearch.retrieve", state);
+                return;
+            }
             Collection<String> matchedAgents = route(prompt1, agentList);
+
+            if (matchedAgents.isEmpty()) {
+                // 直接回答问题
+                rabbitTemplate.convertAndSend("answer.topic", "have.gathered.retrieve", state);
+                return;
+            }
 
             // 统计使用了几个检索器，方便后续合并检索信息
             state.setMaxRetrievalCount(matchedAgents.size());
-            State finalState = state;
+            Boolean ifExistence =  redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getMaxRetrievalCount());
+
             matchedAgents.stream()
                     .filter(Objects::nonNull)
-                    .forEach(s -> rabbitTemplate.convertAndSend("Retrieve", s + ".retrieve", finalState));
+                    .forEach(s -> rabbitTemplate.convertAndSend("Retrieve", s + ".retrieve", state));
 
 
         } catch (Exception e) {
@@ -199,9 +241,9 @@ public class RewriteRouteWorker {
     private Map<String, String> getObjectStringMap() {
         Map<String, String> retrieverToDescription = new LinkedHashMap<>();
         retrieverToDescription.put("数据库混合检索执行器，先提取关键词，然后结合向量搜索（语义）和稀疏搜索（关键词）来检索 Milvus 数据库。最常用的检索场景，适用于绝大多数复杂、开放性问题，以平衡结果的召回率和精确性。", MilvusRetrieverName.HYBRID_RETRIEVER.getClassName());
-        retrieverToDescription.put("数据库过滤检索执行器，首先从查询中提取文档名称等元数据，然后执行精确的向量搜索并强制限定在指定来源内。适用于用户明确提到了信息来源（如“在 XX 报告中...”、“关于 YY 文件”）的场景，保证答案只来自特定文档。", MilvusRetrieverName.FILTER_RETRIEVER.getClassName());
-        retrieverToDescription.put("数据库元数据查询执行器，不进行向量相似度计算，而是基于 Milvus 中的非向量字段（如 come_from）执行精确的数据库查询。适用于需要根据文档类型、作者或特定标签等元数据进行精确筛选的场景。", MilvusRetrieverName.QUERY_RETRIEVER.getClassName());
-//        retrieverToDescription.put("网络检索节点，用于从网络中检索信息，先使用数据库节点，如果数据库中没有相关信息，再考虑选用该节点", webSearchNode);
+        retrieverToDescription.put("数据库过滤检索执行器，首先从查询中提取文档名称等元数据，然后执行精确的向量搜索并强制限定在指定来源内。只适用于用户明确提到了信息来源（如“在 XX 报告中...”、“关于 YY 文件”）的场景，保证答案只来自特定文档。", MilvusRetrieverName.FILTER_RETRIEVER.getClassName());
+        retrieverToDescription.put("数据库元数据检索执行器，不进行向量相似度计算，而是基于 Milvus 中的非向量字段（如 come_from）执行精确的数据库查询。只适用于问题中给出明确标题的情况。", MilvusRetrieverName.QUERY_RETRIEVER.getClassName());
+//        retrieverToDescription.put("网络检索节点，用于从网络中检索信息，先使用数据库节点，如果数据库中没有相关信息，再考虑选用该节点", MilvusRetrieverName.WEB_SEARCH_RETRIEVER.getClassName());
 
         return retrieverToDescription;
     }

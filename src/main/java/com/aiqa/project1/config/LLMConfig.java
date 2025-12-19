@@ -29,7 +29,7 @@ public class LLMConfig {
         return OpenAiChatModel.builder()
                 .apiKey(System.getenv("DOUBAO_API_KEY"))
                 .baseUrl("https://ark.cn-beijing.volces.com/api/v3")
-                .modelName("doubao-1-5-lite-32k-250115")
+                .modelName("ep-20251218135814-vcz9t")
                 .logRequests(true)
                 .logResponses(true)
                 .httpClientBuilder(new SpringRestClientBuilder())

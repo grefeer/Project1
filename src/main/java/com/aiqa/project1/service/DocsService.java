@@ -17,20 +17,22 @@ public interface DocsService {
      * @param file
      * @param description
      * @param userId
+     * @param sessionId
      * @return
      * @throws BusinessException
      */
-    Result uploadSingleDocument(MultipartFile file, String description, String userId) throws BusinessException;
+    Result uploadSingleDocument(MultipartFile file, String description, String userId, String sessionId) throws BusinessException;
 
 
     /**
      * 多文件上传
      * @param files
      * @param userId
+     * @param sessionId
      * @return
      * @throws BusinessException
      */
-    Result uploadMultiDocuments(List<MultipartFile> files, String userId) throws BusinessException;
+    Result uploadMultiDocuments(List<MultipartFile> files, String userId, String sessionId) throws BusinessException;
 
     /**
      * 查询单个文档信息

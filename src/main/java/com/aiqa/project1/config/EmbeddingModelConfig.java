@@ -25,21 +25,21 @@ public class EmbeddingModelConfig {
     }
 
 
-//    @Bean
-//    public EmbeddingModel onnxBGEM3EmbeddingModel() {
-//        PoolingMode poolingMode = PoolingMode.MEAN;
-//        return new OnnxEmbeddingModel(
-//                "C:\\Users\\Grefer\\.ollama\\models\\bge_m3_onnx\\model_quantized.onnx",
-//                "C:\\Users\\Grefer\\.ollama\\models\\bge_m3_onnx\\tokenizer.json",
-//                poolingMode);
-//    }
+    @Bean("bgeM3")
+    public EmbeddingModel onnxBGEM3EmbeddingModel() {
+        PoolingMode poolingMode = PoolingMode.MEAN;
+        return new OnnxEmbeddingModel(
+                System.getenv("bgeM3Onnx") + "\\model_int8.onnx",
+                System.getenv("bgeM3Onnx") + "\\tokenizer.json",
+                poolingMode);
+    }
 
-    @Bean
+    @Bean("MiniLM")
     public EmbeddingModel onnxMiniLML12V2EmbeddingModel() {
         PoolingMode poolingMode = PoolingMode.MEAN;
         return new OnnxEmbeddingModel(
-                "D:\\Docker\\Milvus\\paraphrase_multilingual_MiniLM_L12_v2\\model_fp16.onnx",
-                "D:\\Docker\\Milvus\\paraphrase_multilingual_MiniLM_L12_v2\\tokenizer.json",
+                System.getenv("onnxMiniLML12V2EmbeddingModel") + "\\model_fp16.onnx",
+                System.getenv("onnxMiniLML12V2EmbeddingModel") + "\\tokenizer.json",
                 poolingMode);
     }
 

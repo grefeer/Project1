@@ -16,6 +16,7 @@ public class Document {
     private Long id;
     private String documentId; // 文档唯一标识（如雪花ID）
     private String userId;
+    private String sessionId;
     private String documentName;
     private String description;
     private String fileType;

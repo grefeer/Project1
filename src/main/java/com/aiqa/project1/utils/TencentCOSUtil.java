@@ -116,6 +116,9 @@ public class TencentCOSUtil {
         return bucket.getName();
     }
 
+
+
+
     public String getBucketAddr(Bucket bucket) {
         return bucket.getLocation();
     }
@@ -138,6 +141,8 @@ public class TencentCOSUtil {
 
             // 处理下载到的流
             String encodedDocumentName = URLEncoder.encode(documentName, StandardCharsets.UTF_8);
+
+            response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
             response.setContentType("application/octet-stream"); // 二进制流类型
             response.setHeader("Content-Disposition",
                     "attachment; filename=\"" + encodedDocumentName + "\"; filename*=UTF-8''" + encodedDocumentName);
@@ -249,6 +254,8 @@ public class TencentCOSUtil {
             return null;
         }
     }
+
+
     public String getOssPath(String userId, String documentId, String documentName, Long version) {
         return userId + "/" + documentId + "/" + version + "/" + documentName;
     }

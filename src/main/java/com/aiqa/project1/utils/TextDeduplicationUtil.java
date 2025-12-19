@@ -7,6 +7,7 @@ import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.data.embedding.Embedding;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -28,7 +29,7 @@ public class TextDeduplicationUtil {
     private final EmbeddingModel embeddingModel;
 
 
-    public TextDeduplicationUtil(EmbeddingModel embeddingModel) {
+    public TextDeduplicationUtil(@Qualifier("bgeM3") EmbeddingModel embeddingModel) {
         this.embeddingModel = embeddingModel;
     }
 

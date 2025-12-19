@@ -1,6 +1,7 @@
 package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.State;
+import com.aiqa.project1.utils.RedisStoreUtils;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -47,24 +48,25 @@ public class AnswerWorker {
                 现在，请开始回答。
                 """;
     private final RabbitTemplate rabbitTemplate;
+    private final RedisStoreUtils redisStoreUtils;
 
-    public AnswerWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate) {
+    public AnswerWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
         this.rabbitTemplate = rabbitTemplate;
+        this.redisStoreUtils = redisStoreUtils;
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue("answerWorker.queue"),
+            value = @Queue(value = "answerWorker.queue",durable = "true"),
             exchange = @Exchange(name = "answer.topic", type = ExchangeTypes.TOPIC),
             key = "have.gathered.retrieve"
     ))
     public void run(State state) {
-        ChatMemory chatMemory = state.getChatMemory();
-        List<Content> retrievalInfo = state.getRetrievalInfo();
-        String chatHistory = chatMemory.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
-        String retrievalInfoText = retrievalInfo
+        String chatHistory = redisStoreUtils.getChatMemory(state.getUserId(), state.getSessionId(), 10).stream().map(Object::toString).collect(Collectors.joining("\n"));
+
+        String retrievalInfoText = redisStoreUtils.getRetrievalInfo(state.getUserId(), state.getSessionId(),state.getMemoryId(), "Retrieve")
                 .stream()
-                .map(content -> content.metadata().isEmpty() ? "网络检索节点结果: " + content.toString(): "数据库检索节点结果: " + content.toString())
+                .map(Object::toString)
                 .distinct()
                 .collect(Collectors.joining("\n"));
 
@@ -72,7 +74,10 @@ public class AnswerWorker {
 
         String prompt = ANSWER_TEMPLATE.formatted(chatHistory, retrievalInfoText, query);
         String answer = douBaoLite.chat(prompt);
-        chatMemory.add(AiMessage.from(answer));
-        rabbitTemplate.convertAndSend("reflection",state);
+        Long idx = redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI回答>" + answer);
+        // 延迟，等到redis保存及以后再向rabbitmq发送数据
+        if (idx != null && idx > 0) {
+            rabbitTemplate.convertAndSend("reflection", state);
+        }
     }
 }

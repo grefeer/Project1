@@ -7,6 +7,7 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +30,7 @@ public class TextStructUtil {
     @Value("${langchain4j.TextConfig.CHUNK_OVERLAP}")
     private int CHUNK_OVERLAP;
 
-    public TextStructUtil(EmbeddingModel onnxMiniLML12V2EmbeddingModel, OpenAiChatModel douBaoLite, OllamaChatModel qwen2_5Instruct, OllamaChatModel gemma3_270m) {
+    public TextStructUtil(@Qualifier("bgeM3") EmbeddingModel onnxMiniLML12V2EmbeddingModel, OpenAiChatModel douBaoLite, OllamaChatModel qwen2_5Instruct, OllamaChatModel gemma3_270m) {
         this.onnxMiniLML12V2EmbeddingModel = onnxMiniLML12V2EmbeddingModel;
         this.douBaoLite = douBaoLite;
         this.qwen2_5Instruct = qwen2_5Instruct;
@@ -46,15 +47,12 @@ public class TextStructUtil {
         return onnxMiniLML12V2EmbeddingModel.embed(text).content();
     }
 
-    // 提取关键词
-    public String extractKeywords(String text, String modelName) {
+    // 提取文档元数据
+    public String extractDocumentInfo(String text, String modelName) {
         // 简化实现：基于分词+词频，可替换为LangChain4j调用LLM提取
-        // 示例：return llmClient.extractKeywords(text);
+        // 示例：return llmClient.extractDocumentInfo(text);
 
         String temple = """
-                # 变量定义
-                原始文本：%s
-              
                 你现在是文本元信息提取专员，服务于通用信息处理场景，核心职责是精准识别并提取文本中的标题、作者名、时间三类关键元信息。
                 
                 ## 执行准则
@@ -92,7 +90,7 @@ public class TextStructUtil {
                 开始处理：<原始文本>%s</原始文本>
                 
                 """;
-        String prompt = temple.formatted(text, text);
+        String prompt = temple.formatted(text);
 
         String responses = "";
         try {
@@ -109,9 +107,63 @@ public class TextStructUtil {
         }
         return responses; // 实际需替换为真实逻辑
     }
-//    public String extractKeywords(String text) {
+
+    // 提取文档摘要
+    public String extractAbstract(String text, String modelName) {
+
+        String temple = """
+                # 文档摘要生成助手指令
+                
+                ## 身份与职责
+                你是一位专业的文档处理助手，核心职责是高效处理用户提供的文档，精准生成符合要求的摘要内容，为用户节省信息筛选时间。
+                
+                ## 核心准则
+                1. 原文优先：若文档自带摘要，必须以原文摘要为唯一依据，禁止自行改写或补充内容
+                2. 语言规范：输出内容必须为简体中文，确保语义准确、语句通顺
+                3. 信息完整：严格保留原文摘要的核心信息，不得遗漏关键内容
+                4. 边界清晰：仅处理摘要相关内容，不涉及文档其他部分的解读或分析
+                
+                ## 输入处理规则
+                <文档内容>%s</文档内容>
+                - 读取优先级：优先识别文档中明确标注为"摘要"或"Summary"的段落
+                - 异常处理：若文档无摘要内容，直接输出"文档未包含摘要内容"
+                
+                ## 执行流程
+                1. **摘要识别**：逐段扫描文档内容，定位标题包含"摘要"或"Summary"的段落
+                2. **内容提取**：完整提取已识别的摘要段落全部内容
+                3. **语言转换**：若原文摘要为非中文，将其翻译为简体中文；若为中文则直接保留
+                4. **结果校验**：检查输出内容是否完整覆盖原文摘要信息，确认无遗漏或错误
+                
+                ## 输出规范
+                - 输出内容：仅包含处理后的中文摘要文本
+                - 格式要求：直接输出纯文本，无任何额外标签或说明
+                - 字数限制：与原文摘要长度保持一致，原则上不超过300字
+                - 示例参考：
+                  原文摘要（英文）："This study examines the impact of climate change on agricultural productivity..."
+                  输出："本研究探讨了气候变化对农业生产力的影响..."
+                """;
+        String prompt = temple.formatted(text);
+
+        String responses = "";
+        try {
+//            responses = deepSeek.chat(prompt);
+            System.out.println("--------------------------------------");
+            if (modelName.contains("qwen"))
+                responses = qwen2_5Instruct.chat(prompt);
+            else if (modelName.contains("gemma"))
+                responses = gemma3_270m.chat(prompt);
+            else
+                responses = douBaoLite.chat(prompt);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return responses;
+    }
+
+
+//    public String extractDocumentInfo(String text) {
 //        // 简化实现：基于分词+词频，可替换为LangChain4j调用LLM提取
-//        // 示例：return llmClient.extractKeywords(text);
+//        // 示例：return llmClient.extractDocumentInfo(text);
 //
 //        String prompt = "请从以下文本中提取核心关键词，要求如下：\n" +
 //                "1. 关键词为名词或名词短语，优先保留文本中高频出现、语义核心的概念；\n" +

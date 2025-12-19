@@ -6,10 +6,7 @@ import com.aiqa.project1.mapper.DocumentVersionMapper;
 import com.aiqa.project1.pojo.*;
 import com.aiqa.project1.pojo.document.*;
 import com.aiqa.project1.service.DocsService;
-import com.aiqa.project1.utils.BusinessException;
-import com.aiqa.project1.utils.SnowFlakeUtil;
-import com.aiqa.project1.utils.TencentCOSUtil;
-import com.aiqa.project1.utils.UserUtils;
+import com.aiqa.project1.utils.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -18,18 +15,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -38,19 +33,20 @@ public class DocsServiceimpl implements DocsService {
     private final TencentCOSUtil tencentCOSUtil;
     private final SnowFlakeUtil snowFlakeUtil;
     private final DocumentVersionMapper versionMapper;
-
-    @Autowired
-    private ExecutorService uploadExecutor1;
+    private final RabbitTemplate rabbitTemplate;
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
-
-
     @Autowired
-    public DocsServiceimpl(DocumentMapper documentMapper, TencentCOSUtil tencentCOSUtil, SnowFlakeUtil snowFlakeUtil, DocumentVersionMapper versionMapper) {
+    private DataProcessUtils dataProcessUtils;
+    @Autowired
+    private MilvusSearchUtils milvusSearchUtils;
+
+    public DocsServiceimpl(DocumentMapper documentMapper, TencentCOSUtil tencentCOSUtil, SnowFlakeUtil snowFlakeUtil, DocumentVersionMapper versionMapper, RabbitTemplate rabbitTemplate) {
         this.documentMapper = documentMapper;
         this.tencentCOSUtil = tencentCOSUtil;
         this.snowFlakeUtil = snowFlakeUtil;
         this.versionMapper = versionMapper;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
 //    @Override
@@ -62,9 +58,20 @@ public class DocsServiceimpl implements DocsService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result uploadSingleDocument(MultipartFile file, String description, String userId) {
+    public Result uploadSingleDocument(MultipartFile file, String description, String userId, String sessionId) {
+        String abstractStr = null;
         try {
-            return (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData());
+            // 删除旧的
+            try {
+                milvusSearchUtils.deleteDocumentEmbeddingsByName(file.getOriginalFilename(), userId);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            abstractStr = dataProcessUtils.DataProcess(userId, file);
+
+            description = (description == null) ? abstractStr : description;
+
+            return (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData(), sessionId);
         }
         catch (BusinessException e) {
             return new Result(e.getCode(), e.getMessage(), e.getData());
@@ -73,37 +80,61 @@ public class DocsServiceimpl implements DocsService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result uploadMultiDocuments(List<MultipartFile> files, String userId) {
+    public Result uploadMultiDocuments(List<MultipartFile> files, String userId, String sessionId) {
         Result result = new Result();
+        Boolean deleteFinishedFlag = false;
         DocumentInfoList data = new DocumentInfoList();
         List<String> documentNames = new ArrayList<>();
         files.forEach(e -> documentNames.add(e.getOriginalFilename()));
         int fileSize = documentNames.size();
         AtomicInteger successCount = new AtomicInteger();
 
-        List<CompletableFuture<?>> futures = new ArrayList<>();
+//        List<CompletableFuture<?>> futures = new ArrayList<>();
+        String abstractStr = null;
 
         for (int i = 0; i < fileSize; i++) {
             MultipartFile multipartFile = files.get(i);
             String documentName = documentNames.get(i);
-            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
-                try {
-                    data.getSuccessList().add(
+            try {
+                abstractStr = dataProcessUtils.DataProcess(userId, multipartFile);
+
+                data.getSuccessList().add(
                             uploadSingleDocumentUnits(
                                     multipartFile,
-                                    documentName,
-                                    userId, new DocumentResponseData()
+                                    abstractStr,
+                                    userId, new DocumentResponseData(),
+                                    sessionId
                             ));
                     successCount.getAndIncrement();
-                } catch (BusinessException e) {
-                    log.error(e.getMessage());
-                    data.getFailList().add(e);
+                // 删除旧的
+                try {
+                    milvusSearchUtils.deleteDocumentEmbeddingsByName(multipartFile.getOriginalFilename(), userId);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-            }, uploadExecutor1);
-            futures.add(future);
+            } catch (BusinessException e) {
+                log.error(e.getMessage());
+                data.getFailList().add(e);
+            }
+//            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
+//                try {
+//                    data.getSuccessList().add(
+//                            uploadSingleDocumentUnits(
+//                                    multipartFile,
+//                                    documentName,
+//                                    userId, new DocumentResponseData()
+//                            ));
+//                    successCount.getAndIncrement();
+//                } catch (BusinessException e) {
+//                    log.error(e.getMessage());
+//                    data.getFailList().add(e);
+//                }
+//            }, uploadExecutor);
+//            futures.add(future);
         }
 
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+//        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
 
         result.setData(data);
         result.setMessage("批量上传成功（成功" + successCount.get() + "个，失败" + (fileSize - successCount.get())+"个）");
@@ -171,7 +202,7 @@ public class DocsServiceimpl implements DocsService {
 
 
     @Transactional(rollbackFor = Exception.class, propagation = Propagation.NESTED)
-    public Object uploadSingleDocumentUnits(MultipartFile file, String description, String userId, Object data) {
+    public Object uploadSingleDocumentUnits(MultipartFile file, String description, String userId, Object data, String sessionId) {
         Result res = new Result();
 
         String documentName = file.getOriginalFilename();
@@ -185,6 +216,11 @@ public class DocsServiceimpl implements DocsService {
 
             boolean insertFlag = (document == null);
             String documentId; // 定义文档主表的唯一 ID
+
+            // 用于存储当前文档关联的所有sessionId（去重）
+            Set<String> sessionIdSet = new LinkedHashSet<>();
+
+            // 如果是新的
             if (insertFlag) {
                 documentId = String.valueOf(snowFlakeUtil.nextId());
                 document = new Document();
@@ -202,13 +238,24 @@ public class DocsServiceimpl implements DocsService {
                     QueryWrapper<DocumentVersion> wrapperVersion =  new QueryWrapper<>();
                     wrapperVersion.eq("document_id", documentId);
                     versionMapper.delete(wrapperVersion);
-
                     document.setCurrentVersion(1L);
                 } else {
+
+                    // 未删除文档：历史sessionId + 新增当前sessionId（去重）
+                    String currentSessionId = document.getSessionId();
+                    if (StringUtils.hasText(currentSessionId)) {
+                        String[] oldSessions = currentSessionId.split(",");
+                        sessionIdSet.addAll(Arrays.asList(oldSessions));
+                    }
+
                     document.setCurrentVersion(document.getCurrentVersion() + 1); // 版本号加 1
                 }
-
             }
+
+            sessionIdSet.add(sessionId);
+            // 核心：将集合转为纯逗号分隔字符串（无重复、无空格）
+            String finalSessionIds = String.join(",", sessionIdSet);
+            document.setSessionId(finalSessionIds);
 
             String ossPath = tencentCOSUtil.getOssPath(userId, documentId, documentName, document.getCurrentVersion());
             String previewUrl = tencentCOSUtil.upLoadFile(file, ossPath);
@@ -266,9 +313,17 @@ public class DocsServiceimpl implements DocsService {
                 return result;
 
             UpdateWrapper<Document> wrapperVersion = new UpdateWrapper<>();
-            wrapperVersion.eq("document_id", documentId).set("status", "DELETED");
+            wrapperVersion.eq("document_id", documentId).eq("user_id", authInfo.getUserId()).set("status", "DELETED").set("session_id", "");
             documentMapper.update(document, wrapperVersion);
 
+            // 向rabbitmq发送删除请求
+            rabbitTemplate.convertAndSend(
+                    "update",
+                    "update.embedding",
+                    Map.of(
+                            "documentName", document.getDocumentName(),
+                            "userId", authInfo.getUserId()
+                    ));
 //            String key = "docs/" + tencentCOSUtil.getOssPath(
 //                    authInfo.getUserId(),
 //                    documentId,

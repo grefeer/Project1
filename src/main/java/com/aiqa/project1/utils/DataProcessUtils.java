@@ -1,35 +1,29 @@
 package com.aiqa.project1.utils;
 
-import com.aiqa.project1.controller.UserController;
-import com.aiqa.project1.pojo.document.DocumentResponseData;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import dev.langchain4j.data.document.Document;
-import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
 import io.milvus.v2.client.MilvusClientV2;
 import io.milvus.v2.service.vector.request.InsertReq;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 /**
  * 数据处理主流程
@@ -39,7 +33,10 @@ public class DataProcessUtils {
     private final TextStructUtil textStructUtil;
     private final MilvusSearchUtils milvusSearchUtils;
     private final MilvusClientV2 milvusClient;
-    private final ExecutorService uploadExecutor;
+
+    @Autowired
+    @Qualifier("documentUploadExecutor")
+    private ExecutorService documentUploadExecutor;
 
     private static final int MAX_RETRY_TIMES = 3; // 重试次数常量，便于统一修改
     private static final Type MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType(); // 类型令牌，保证类型安全
@@ -51,24 +48,23 @@ public class DataProcessUtils {
 
     @PreDestroy
     public void destroy() {
-        uploadExecutor.shutdown();
+        documentUploadExecutor.shutdown();
         try {
-            if (!uploadExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                uploadExecutor.shutdownNow();
+            if (!documentUploadExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                documentUploadExecutor.shutdownNow();
             }
         } catch (InterruptedException e) {
-            uploadExecutor.shutdownNow();
+            documentUploadExecutor.shutdownNow();
         }
     }
 
-    public DataProcessUtils(TextStructUtil textStructUtil, MilvusSearchUtils milvusSearchUtils, MilvusClientV2 milvusClient, ExecutorService uploadExecutor) {
+    public DataProcessUtils(TextStructUtil textStructUtil, MilvusSearchUtils milvusSearchUtils, MilvusClientV2 milvusClient) {
         this.textStructUtil = textStructUtil;
         this.milvusSearchUtils = milvusSearchUtils;
         this.milvusClient = milvusClient;
-        this.uploadExecutor = uploadExecutor;
     }
 
-    public void DataProcess(Integer userId, File rawFile) {
+    public String DataProcess(String userId, MultipartFile rawFile) {
 
         // 文本提取
         Document extractContent = null;
@@ -76,7 +72,7 @@ public class DataProcessUtils {
 
         try {
             extractContent = TextExtractUtil.extractLocalDocument(rawFile);
-        } catch (FileNotFoundException e) {
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
 //        System.out.println(extractContent.text());
@@ -99,6 +95,7 @@ public class DataProcessUtils {
 
 
         String keywordStr = null;
+        String abstractStr = null;
         Map<String, Object> keywordMap = null;
         String author = null;
         String title = null;
@@ -106,13 +103,17 @@ public class DataProcessUtils {
 
         for (int retry = 0; retry < MAX_RETRY_TIMES; retry++) {
             try {
-                keywordStr = textStructUtil.extractKeywords(firstSegmentText, "douBao");
+                keywordStr = textStructUtil.extractDocumentInfo(firstSegmentText, "douBao");
+                abstractStr = textStructUtil.extractAbstract(
+                        segments.stream().map(Object::toString).collect(Collectors.joining("")),
+                        "douBao");
+
                 break; // 成功获取则退出循环
             } catch (Exception e) {
                 e.printStackTrace();
                 // 最后一次重试失败则不再重试
                 if (retry == MAX_RETRY_TIMES - 1) {
-                    System.err.println("关键词提取失败，已达到最大重试次数：" + MAX_RETRY_TIMES);
+                    System.err.println("元数据提取失败，已达到最大重试次数：" + MAX_RETRY_TIMES);
                 }
             }
         }
@@ -123,12 +124,13 @@ public class DataProcessUtils {
                 author = (String) keywordMap.get("author");
                 title = (String) keywordMap.get("title");
                 date = (String) keywordMap.get("date");
-
             } catch (Exception e) {
                 e.printStackTrace();
                 System.err.println("JSON解析关键词失败，原始字符串：" + keywordStr);
             }
         }
+
+
 
         System.out.println(keywordMap);
 
@@ -145,7 +147,7 @@ public class DataProcessUtils {
                     log.error("处理文本分块失败", e);
                     throw new CompletionException(e); // 抛出异常，让主线程感知
                 }
-            }, uploadExecutor);
+            }, documentUploadExecutor);
             futures.add(future);
         }
 
@@ -170,7 +172,7 @@ public class DataProcessUtils {
                 JsonObject row = new JsonObject();
                 row.addProperty("text", textSegment.text());
                 row.add("text_dense", gson.toJsonTree(embedding.vector()));
-                row.addProperty("come_from", rawFile.getName());
+                row.addProperty("come_from", rawFile.getOriginalFilename());
 
                 // 补充文件元数据
                 if (keywordMap != null) {
@@ -178,18 +180,19 @@ public class DataProcessUtils {
                     row.addProperty("title", title);
                     row.addProperty("timestamp", date);
                 }
-                row.addProperty("fileName", rawFile.getName());
+                row.addProperty("fileName", rawFile.getOriginalFilename());
                 data.add(row);
 
             }
             InsertReq insertReq = InsertReq.builder()
-                    .collectionName(collectionName + "_" + userId.toString())
+                    .collectionName(collectionName + "_" + userId)
                     .data(data)
                     .build();
 
             milvusSearchUtils.createMilvusCollection(userId);
             milvusClient.insert(insertReq);
-            log.info("向量库写入完成：{}", rawFile.getName());
+            log.info("向量库写入完成：{}", rawFile.getOriginalFilename());
         }
+        return abstractStr;
     }
 }

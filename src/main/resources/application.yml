@@ -26,29 +26,30 @@ spring:
     password: admin
     listener:
       simple:
-        # 手动确认模式
-        acknowledge-mode: manual
+        acknowledge-mode: auto
         retry:
           # 开启重试
           enabled: true
           # 最大重试次数
-          max-attempts: 5
+          max-attempts: 3
           # 首次重试时间间隔
           initial-interval: 1000
-          # 重试时间间隔递增
-          max-interval: 10000
+          max-interval: 1000
+          stateless: true
+
+
   data:
     redis:
       port: 6379
-      password: 123456
+      password: hghgnzlbd
       host: localhost
       database: 0
       timeout: 60s
       lettuce:
         pool:
           enabled: true
-          max-active: 10  # 允许最大连接数，默认8（负值表示没有限制），推荐值：大于cpu * 2，通常为(cpu * 2) + 2
-          max-idle: 8     # 最大空闲连接数，默认8，推荐值：cpu * 2
+          max-active: 44  # 允许最大连接数，默认8（负值表示没有限制），推荐值：大于cpu * 2，通常为(cpu * 2) + 2
+          max-idle: 40     # 最大空闲连接数，默认8，推荐值：cpu * 2
           min-idle: 0     # 最小空闲连接数，默认0
           max-wait: 5s    # 连接用完时，新的请求等待时间(s秒、ms毫秒)，超过该时间抛出异常，默认-1（负值表示没有限制）
 

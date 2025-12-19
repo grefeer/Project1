@@ -10,6 +10,7 @@ import com.alibaba.fastjson.JSON;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -19,6 +20,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @Component
@@ -44,24 +46,42 @@ public class MilvusFilterRetrieveWorker {
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue("MilvusFilterRetrieveWorker.retrieve"),
+            value = @Queue(value = "MilvusFilterRetrieveWorker.retrieve", durable = "true"),
             exchange = @Exchange(value = "Retrieve", type = ExchangeTypes.DIRECT),
             key = "MilvusFilterRetrieveWorker.retrieve"
     ))
     public void run(State state) {
 
-        Integer userId = state.getUserId();
-        List<Content> retrievalInfo = state.getRetrievalInfo();
-        String query = state.getRetrievalQuery();
+        try {
+            Integer userId = state.getUserId();
 
-        String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
-        String keywords = douBaoLite.chat(prompt1);
-        List<Content> retrievalInformation = milvusFilterRetriever.retrieveTopK10(userId, keywords, Query.from(query));
-        retrievalInfo.addAll(retrievalInformation);
+            String query = state.getRetrievalQuery();
 
-        redisStoreUtils.setRetrievalInfo(state.getUserId(), 0, "MilvusFilterRetrieveWorker", JSON.toJSONString(retrievalInformation));
+            String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
+            String keywords = douBaoLite.chat(prompt1);
+            List<Content> retrievalInformation = milvusFilterRetriever.retrieve(userId, keywords, 5, Query.from(query));
 
-        rabbitTemplate.convertAndSend("gather.topic", "MilvusFilterRetrieveWorker.retrieve", state);
+            redisStoreUtils.setRetrievalInfo(
+                    userId,
+                    state.getSessionId(),
+                    state.getMemoryId(),
+                    "Retrieve",
+                    retrievalInformation
+                            .stream()
+                            .map(content -> "<MilvusFilterRetrieveWorker检索结果>" + content.toString() + "</MilvusFilterRetrieveWorker检索结果>")
+                            .collect(Collectors.toList())
+            );
+
+            rabbitTemplate.convertAndSend("gather.topic", "MilvusFilterRetrieveWorker.retrieve", state);
+        } catch (AmqpException e) {
+            e.printStackTrace();
+            // 出现错误，直接返回
+            try {
+                rabbitTemplate.convertAndSend("gather.topic", "MilvusFilterRetrieveWorker.retrieve", state);
+            } catch (AmqpException ex) {
+                throw new RuntimeException("rabbitmq异常，具体发生在MilvusFilterRetrieveWorker向gather.topic发送消息的过程中",ex);
+            }
+        }
 
     }
 }

@@ -8,6 +8,7 @@ import com.alibaba.fastjson.JSON;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -17,6 +18,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @Component
@@ -40,26 +42,48 @@ public class MilvusHybridRetrieveWorker {
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue("MilvusHybridRetrieveWorker.retrieve"),
+            value = @Queue(value = "MilvusHybridRetrieveWorker.retrieve", durable = "true"),
             exchange = @Exchange(value = "Retrieve", type = ExchangeTypes.DIRECT),
             key = "MilvusHybridRetrieveWorker.retrieve"
     ))
     public void run(State state) {
 
-        Integer userId = state.getUserId();
-        List<Content> retrievalInfo = state.getRetrievalInfo();
-        String query = state.getRetrievalQuery();
+        try {
+            Integer userId = state.getUserId();
 
-        String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
-        String keywords = douBaoLite.chat(prompt1);
+            String query = state.getRetrievalQuery();
 
-        // TODO 每次将文件传入数据库时都先根据文件提取出文件是属于哪个领域的，这样检索的时候就减少了搜索范围
-        // TODO 用户的问题中如果有提及文件的，直接调用milvusFilterContentRetriever，
-        List<Content> retrievalInformation = milvusHybridRetriever.retrieveTopK10WithRRF(userId, keywords, Query.from(query));
-        retrievalInfo.addAll(retrievalInformation);
+            String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
+            String keywords = douBaoLite.chat(prompt1);
 
-        redisStoreUtils.setRetrievalInfo(state.getUserId(), 0, "MilvusHybridRetrieveWorker", JSON.toJSONString(retrievalInformation));
+            // 每次将文件传入数据库时都先根据文件提取出文件是属于哪个领域的，这样检索的时候就减少了搜索范围
+            // 用户的问题中如果有提及文件的，直接调用milvusFilterContentRetriever，
+            List<Content> retrievalInformation = milvusHybridRetriever.retrieveTopK5WithRRF(userId, keywords, Query.from(query));
+            System.out.println(retrievalInformation.size());
+            retrievalInformation
+                    .stream()
+                    .map(Object::toString).forEach(s -> System.out.println("aiai:\n" +s));
 
-        rabbitTemplate.convertAndSend("gather.topic", "MilvusHybridRetrieveWorker.retrieve", state);
+            redisStoreUtils.setRetrievalInfo(
+                    userId,
+                    state.getSessionId(),
+                    state.getMemoryId(),
+                    "Retrieve",
+                    retrievalInformation
+                            .stream()
+                            .map(content -> "<MilvusHybridRetrieveWorker检索结果>" + content.toString() + "</MilvusHybridRetrieveWorker检索结果>")
+                            .collect(Collectors.toList())
+            );
+
+            rabbitTemplate.convertAndSend("gather.topic", "MilvusHybridRetrieveWorker.retrieve", state);
+        } catch (AmqpException e) {
+            e.printStackTrace();
+            // 出现错误，直接返回
+            try {
+                rabbitTemplate.convertAndSend("gather.topic", "MilvusHybridRetrieveWorker.retrieve", state);
+            } catch (AmqpException ex) {
+                throw new RuntimeException("rabbitmq异常，具体发生在MilvusHybridRetrieveWorker向gather.topic发送消息的过程中",ex);
+            }
+        }
     }
 }

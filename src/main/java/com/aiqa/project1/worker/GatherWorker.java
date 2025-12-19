@@ -17,7 +17,6 @@ public class GatherWorker {
     private final RabbitTemplate rabbitTemplate;
     private final RedisStoreUtils redisStoreUtils;
 
-    private State state = null;
 
     public GatherWorker(RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.rabbitTemplate = rabbitTemplate;
@@ -26,21 +25,19 @@ public class GatherWorker {
 
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue("gather"),
+            value = @Queue(value = "gather",durable = "true"),
             exchange = @Exchange(value = "gather.topic", type = ExchangeTypes.TOPIC),
-            key = "*.retrieve"
+            key = "#.retrieve"
     ))
     public void receiveRetrieveResult(State state) {
 
         // TODO 储存逻辑,state的检索器数量以及检索信息需要共享，GatherWorker必须是无状态的，如果保存了state，就是有状态的节点了，
         //  所以不能在GatherWorker中保存状态，只能在radis中保存，可以借助langchain4j的永久固化记忆章节
 
-        Boolean ifExistence =  redisStoreUtils.putRetrievalCount(state.getUserId(), 0, state.getMaxRetrievalCount());
-        Long retrievalCount = redisStoreUtils.decreaseRetrievalCount(state.getUserId(), 0);
+        Long retrievalCount = redisStoreUtils.decreaseRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId());
 
         if (retrievalCount <= 0) {
             rabbitTemplate.convertAndSend("answer.topic", "have.gathered.retrieve", state);
-            return;
         } else {
             state.setMaxRetrievalCount(Math.toIntExact(retrievalCount));
         }
