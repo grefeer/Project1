@@ -41,7 +41,7 @@ public class MilvusHybridRetrieveNode implements Node{
         // TODO 用户的问题中如果有提及文件的，直接调用milvusFilterContentRetriever，
 
 
-        retrievalInfo.addAll(milvusHybridRetriever.retrieveTopK10WithRRF(userId, keywords, Query.from(query)));
+        retrievalInfo.addAll(milvusHybridRetriever.retrieveTopK10WithRRF(userId, state.getSessionId(), keywords, Query.from(query)));
         return state;
 
     }

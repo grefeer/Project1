@@ -15,6 +15,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -63,17 +64,28 @@ public class StartWorker {
     public void run(State state) {
         Integer sessionId = state.getSessionId();
         QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
+        List<Document> documentList = new ArrayList<>();
+
 //        queryWrapper.like("session_id", sessionId.toString());
         queryWrapper.apply("FIND_IN_SET({0}, session_id) > 0", sessionId);
+        queryWrapper.eq("user_id", state.getUserId());
+        documentList = documentMapper.selectList(queryWrapper);
 
-        List<Document> documentList = documentMapper.selectList(queryWrapper);
+        // 当前会话没有传递文件，用数据库进行回答
+        if (documentList.isEmpty()) {
+            QueryWrapper<Document> allQueryWrapper = new QueryWrapper<>();
+            allQueryWrapper.eq("user_id", state.getUserId());
+            documentList = documentMapper.selectList(allQueryWrapper);
+            state.setRetrievalGlobalFlag(true);
+        }
+
         String documentsAbstract = documentList.stream()
                 .map(document -> document.getDocumentName() + "的摘要:"+ document.getDescription())
                 .collect(Collectors.joining("\n"));
 
         String prompt = CHOOSE_TEMPLATE.formatted(
                 documentsAbstract,
-                (state.getRetrievalQuery().isEmpty()) ? state.getQuery() : state.getRetrievalQuery()
+                (state.getRetrievalQuery() == null || state.getRetrievalQuery().isEmpty()) ? state.getQuery() : state.getRetrievalQuery()
         );
 
         String result = douBaoLite.chat(prompt);

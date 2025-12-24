@@ -19,6 +19,9 @@ public class SystemInitRunner implements CommandLineRunner {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final Environment environment; // 注入环境变量
+
+
+
     @Autowired
     public SystemInitRunner(UserMapper userMapper, PasswordEncoder passwordEncoder, Environment environment) {
         this.userMapper = userMapper;

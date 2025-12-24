@@ -2,12 +2,24 @@ package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.Node;
 import com.aiqa.project1.nodes.State;
+import com.aiqa.project1.util.AsyncTaskExecutor;
+import com.aiqa.project1.util.RateLimiter;
+import com.aiqa.project1.util.RedisPoolManager;
+import com.aiqa.project1.util.TimeoutControl;
+import com.aiqa.project1.utils.MilvusHybridRetriever;
 import com.aiqa.project1.utils.MilvusQueryRetriever;
+import com.aiqa.project1.utils.MilvusSearchUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
 import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
+import io.milvus.client.MilvusServiceClient;
+import io.milvus.v2.service.vector.response.QueryResp;
+import io.milvus.v2.service.vector.response.SearchResp;
+
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -15,6 +27,7 @@ import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -25,9 +38,7 @@ import java.util.stream.Collectors;
 
 
 @Component
-public class MilvusQueryRetrieveWorker {
-    private final OpenAiChatModel douBaoLite;
-    private final RabbitTemplate rabbitTemplate;
+public class MilvusQueryRetrieveWorker extends AbstractRetrieveWorker {
 
     private final MilvusQueryRetriever milvusQueryRetriever;
     private static final String KEYWORD_EXTRACTION_TEMPLATE = """
@@ -37,13 +48,30 @@ public class MilvusQueryRetrieveWorker {
             例如：
             2106.09685v2.pdf
             """;
-    private final RedisStoreUtils redisStoreUtils;
 
-    public MilvusQueryRetrieveWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, MilvusQueryRetriever milvusQueryRetriever, RedisStoreUtils redisStoreUtils) {
-        this.douBaoLite = douBaoLite;
-        this.rabbitTemplate = rabbitTemplate;
+    public MilvusQueryRetrieveWorker(
+        OpenAiChatModel douBaoLite,
+        MilvusQueryRetriever milvusQueryRetriever,
+        RabbitTemplate rabbitTemplate,
+        RedisStoreUtils redisStoreUtils,
+        RedisTemplate<String, Object> redisTemplate,
+        ObjectMapper objectMapper,
+        MilvusSearchUtils milvusSearchUtils,
+        AsyncTaskExecutor asyncTaskExecutor,
+        RateLimiter rateLimiter,
+        TimeoutControl timeoutControl
+    ) {
+        super(
+            rabbitTemplate,
+            redisTemplate,
+            douBaoLite,
+            objectMapper,
+            redisStoreUtils,
+            asyncTaskExecutor,
+            timeoutControl,
+            rateLimiter,
+            milvusSearchUtils);
         this.milvusQueryRetriever = milvusQueryRetriever;
-        this.redisStoreUtils = redisStoreUtils;
     }
 
     @RabbitListener(bindings = @QueueBinding(
@@ -52,48 +80,22 @@ public class MilvusQueryRetrieveWorker {
             key = "MilvusQueryRetrieveWorker.retrieve"
     ))
     public void run(State state) {
+        executeRetrieve(state, "MilvusQueryRetrieveWorker.retrieve");
+    }
 
-        try {
-            Integer userId = state.getUserId();
-            String query = state.getRetrievalQuery();
+    @Override
+    protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
+        return milvusQueryRetriever.retrieve(userId, sessionId, keywords, true, query);
+    }
 
-            String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
-            String keywords = douBaoLite.chat(prompt1);
+    @Override
+    protected String extractKeywords(String query) {
+        String prompt = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
+        return douBaoLite.chat(prompt);
+    }
 
-//        List<String> threadSafeKeywordsList = Collections.synchronizedList(new ArrayList<>()); 消息队列异步并行处理消息，无需synchronizedList
-            List<String> KeywordsList = new ArrayList<>();
-//            Collections.addAll(KeywordsList, keywords.split(",")); 多文档名切分时，可能会将空格切分到文档名中
-            Arrays.stream(keywords.split(",")).map(String::trim).forEach(KeywordsList::add);
-
-            List<Content> retrievalInformation = milvusQueryRetriever.retrieve(userId, KeywordsList, true, Query.from(query));
-
-            System.out.println(KeywordsList);
-            System.out.println("----------------------------------");
-            retrievalInformation.forEach(System.out::println);
-            System.out.println("----------------------------------");
-
-            redisStoreUtils.setRetrievalInfo(
-                    userId,
-                    state.getSessionId(),
-                    state.getMemoryId(),
-                    "Retrieve",
-                    retrievalInformation
-                            .stream()
-                            .map(content -> "<MilvusQueryRetrieveWorker检索结果>" + content.toString() + "</MilvusQueryRetrieveWorker检索结果>")
-                            .collect(Collectors.toList())
-            );
-
-
-            rabbitTemplate.convertAndSend("gather.topic", "MilvusQueryRetrieveWorker.retrieve", state);
-        } catch (AmqpException e) {
-            e.printStackTrace();
-            System.out.println("fuck");
-            // 出现错误，直接返回
-            try {
-                rabbitTemplate.convertAndSend("gather.topic", "MilvusQueryRetrieveWorker.retrieve", state);
-            } catch (AmqpException ex) {
-                throw new RuntimeException("rabbitmq异常，具体发生在MilvusQueryRetrieveWorker向gather.topic发送消息的过程中",ex);
-            }
-        }
+    @Override
+    protected List<Content> parseSearchResults(Object searchResults) {
+        return MilvusSearchUtils.getContentsFromQueryResp((QueryResp) searchResults);
     }
 }

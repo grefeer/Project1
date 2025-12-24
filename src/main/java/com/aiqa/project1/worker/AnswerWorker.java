@@ -64,7 +64,7 @@ public class AnswerWorker {
     public void run(State state) {
         String chatHistory = redisStoreUtils.getChatMemory(state.getUserId(), state.getSessionId(), 10).stream().map(Object::toString).collect(Collectors.joining("\n"));
 
-        String retrievalInfoText = redisStoreUtils.getRetrievalInfo(state.getUserId(), state.getSessionId(),state.getMemoryId(), "Retrieve")
+        String retrievalInfoText = redisStoreUtils.getRetrievalInfo(state.getUserId(), state.getSessionId(),state.getMemoryId(), "retrieve")
                 .stream()
                 .map(Object::toString)
                 .distinct()
@@ -74,7 +74,7 @@ public class AnswerWorker {
 
         String prompt = ANSWER_TEMPLATE.formatted(chatHistory, retrievalInfoText, query);
         String answer = douBaoLite.chat(prompt);
-        Long idx = redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI回答>" + answer);
+        Long idx = redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI思考>" + answer);
         // 延迟，等到redis保存及以后再向rabbitmq发送数据
         if (idx != null && idx > 0) {
             rabbitTemplate.convertAndSend("reflection", state);

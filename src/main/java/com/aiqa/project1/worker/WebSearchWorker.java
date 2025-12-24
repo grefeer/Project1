@@ -2,32 +2,63 @@ package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.Node;
 import com.aiqa.project1.nodes.State;
+import com.aiqa.project1.util.AsyncTaskExecutor;
+import com.aiqa.project1.util.RateLimiter;
+import com.aiqa.project1.util.RedisPoolManager;
+import com.aiqa.project1.util.TimeoutControl;
+import com.aiqa.project1.utils.MilvusHybridRetriever;
+import com.aiqa.project1.utils.MilvusSearchUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
+import io.milvus.client.MilvusServiceClient;
+
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.List;
 
 /**
  * 调用Tavily API实现
  */
 @Component
-public class WebSearchWorker {
+public class WebSearchWorker extends AbstractRetrieveWorker {
     private final ContentRetriever webSearchContentRetriever;
-    private final RedisStoreUtils redisStoreUtils;
-    private final RabbitTemplate rabbitTemplate;
 
-    public WebSearchWorker(ContentRetriever webSearchContentRetriever, RedisStoreUtils redisStoreUtils, RabbitTemplate rabbitTemplate) {
+    public WebSearchWorker(
+        OpenAiChatModel douBaoLite,
+        ContentRetriever webSearchContentRetriever,
+        RabbitTemplate rabbitTemplate,
+        RedisStoreUtils redisStoreUtils,
+        RedisTemplate<String, Object> redisTemplate,
+        ObjectMapper objectMapper,
+        MilvusSearchUtils milvusSearchUtils,
+        AsyncTaskExecutor asyncTaskExecutor,
+        RateLimiter rateLimiter,
+        TimeoutControl timeoutControl
+    ) {
+        super(
+            rabbitTemplate,
+            redisTemplate,
+            douBaoLite,
+            objectMapper,
+            redisStoreUtils,
+            asyncTaskExecutor,
+            timeoutControl,
+            rateLimiter,
+            milvusSearchUtils);
         this.webSearchContentRetriever = webSearchContentRetriever;
-        this.redisStoreUtils = redisStoreUtils;
-        this.rabbitTemplate = rabbitTemplate;
     }
 
     @RabbitListener(bindings = @QueueBinding(
@@ -36,12 +67,21 @@ public class WebSearchWorker {
             key = "WebSearch.retrieve"
     ))
     public void run(State state) {
-        redisStoreUtils.setRetrievalInfo(
-                state.getUserId(),
-                state.getSessionId(),
-                state.getMemoryId(),
-                "Retrieve",
-                Collections.singleton(webSearchContentRetriever.retrieve(Query.from(state.getRetrievalQuery()))));
-        rabbitTemplate.convertAndSend("gather.topic","WebSearch.retrieve", state);
+        executeRetrieve(state, "WebSearch.retrieve");
+    }
+
+    @Override
+    protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
+        return webSearchContentRetriever.retrieve(query);
+    }
+
+    @Override
+    protected String extractKeywords(String query) {
+        return "";
+    }
+
+    @Override
+    protected List<Content> parseSearchResults(Object searchResults) {
+        return null;
     }
 }

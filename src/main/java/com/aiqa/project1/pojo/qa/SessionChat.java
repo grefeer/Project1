@@ -8,30 +8,18 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("userChatMemory")
-public class UserChatMemory {
+@TableName("sessionchat")
+public class SessionChat {
     @TableId(type = IdType.AUTO)
     private Integer id;
     @TableField("user_id")
     private Integer userId;
     @TableField("session_id")
     private Integer sessionId;
-    @TableField("memory_id")
-    private Integer memoryId;
-    @TableField("content")
-    private String content;
-    @TableField("last_active_time")
-    private LocalDateTime lastActiveTime;
-    @TableField("status")
-    private Integer status;
-
-    public boolean checkStatus() {
-        return status == 0 || status == 1;
-    }
+    @TableField("session_name")
+    private String sessionName;
 }

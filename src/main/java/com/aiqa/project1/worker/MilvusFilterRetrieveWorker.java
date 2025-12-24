@@ -1,33 +1,39 @@
 package com.aiqa.project1.worker;
 
-import com.aiqa.project1.nodes.Node;
 import com.aiqa.project1.nodes.State;
-import com.aiqa.project1.utils.MilvusFilterContentRetriever;
+import com.aiqa.project1.util.AsyncTaskExecutor;
+import com.aiqa.project1.util.RateLimiter;
+import com.aiqa.project1.util.RedisPoolManager;
+import com.aiqa.project1.util.TimeoutControl;
 import com.aiqa.project1.utils.MilvusFilterRetriever;
-import com.aiqa.project1.utils.MilvusQueryContentRetriever;
+import com.aiqa.project1.utils.MilvusSearchUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
-import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
-import org.springframework.amqp.AmqpException;
+import io.milvus.client.MilvusServiceClient;
+import io.milvus.grpc.SearchResults;
+import io.milvus.v2.service.vector.response.SearchResp;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.stream.Collectors;
-
 
 @Component
-public class MilvusFilterRetrieveWorker {
-    private final OpenAiChatModel douBaoLite;
+@Slf4j
+public class MilvusFilterRetrieveWorker extends AbstractRetrieveWorker {
+    
     private final MilvusFilterRetriever milvusFilterRetriever;
-    private final RabbitTemplate rabbitTemplate;
 
     private static final String KEYWORD_EXTRACTION_TEMPLATE = """
             给定以下查询，你的任务是提取出该问题所在的文档名称。
@@ -36,13 +42,30 @@ public class MilvusFilterRetrieveWorker {
             例如：
             2106.09685v2.pdf
             """;
-    private final RedisStoreUtils redisStoreUtils;
 
-    public MilvusFilterRetrieveWorker(OpenAiChatModel douBaoLite, MilvusFilterRetriever milvusFilterRetriever, MilvusQueryContentRetriever milvusQueryContentRetriever, MilvusFilterContentRetriever milvusFilterContentRetriever, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
-        this.douBaoLite = douBaoLite;
+    public MilvusFilterRetrieveWorker(
+        OpenAiChatModel douBaoLite,
+        MilvusFilterRetriever milvusFilterRetriever,
+        RabbitTemplate rabbitTemplate,
+        RedisStoreUtils redisStoreUtils,
+        RedisTemplate<String, Object> redisTemplate,
+        ObjectMapper objectMapper,
+        MilvusSearchUtils milvusSearchUtils,
+        AsyncTaskExecutor asyncTaskExecutor,
+        RateLimiter rateLimiter,
+        TimeoutControl timeoutControl
+    ) {
+        super(
+            rabbitTemplate,
+            redisTemplate,
+            douBaoLite,
+            objectMapper,
+            redisStoreUtils,
+            asyncTaskExecutor,
+            timeoutControl,
+            rateLimiter,
+            milvusSearchUtils);
         this.milvusFilterRetriever = milvusFilterRetriever;
-        this.rabbitTemplate = rabbitTemplate;
-        this.redisStoreUtils = redisStoreUtils;
     }
 
     @RabbitListener(bindings = @QueueBinding(
@@ -51,37 +74,27 @@ public class MilvusFilterRetrieveWorker {
             key = "MilvusFilterRetrieveWorker.retrieve"
     ))
     public void run(State state) {
+        executeRetrieve(state, "MilvusFilterRetrieveWorker.retrieve");
+    }
 
+    @Override
+    protected String extractKeywords(String query) {
+        String prompt = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
+        return douBaoLite.chat(prompt);
+    }
+
+    @Override
+    protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
+        return milvusFilterRetriever.retrieve(userId, sessionId, keywords, 5, query);
+    }
+
+    @Override
+    protected List<Content> parseSearchResults(Object searchResults) {
         try {
-            Integer userId = state.getUserId();
-
-            String query = state.getRetrievalQuery();
-
-            String prompt1 = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
-            String keywords = douBaoLite.chat(prompt1);
-            List<Content> retrievalInformation = milvusFilterRetriever.retrieve(userId, keywords, 5, Query.from(query));
-
-            redisStoreUtils.setRetrievalInfo(
-                    userId,
-                    state.getSessionId(),
-                    state.getMemoryId(),
-                    "Retrieve",
-                    retrievalInformation
-                            .stream()
-                            .map(content -> "<MilvusFilterRetrieveWorker检索结果>" + content.toString() + "</MilvusFilterRetrieveWorker检索结果>")
-                            .collect(Collectors.toList())
-            );
-
-            rabbitTemplate.convertAndSend("gather.topic", "MilvusFilterRetrieveWorker.retrieve", state);
-        } catch (AmqpException e) {
-            e.printStackTrace();
-            // 出现错误，直接返回
-            try {
-                rabbitTemplate.convertAndSend("gather.topic", "MilvusFilterRetrieveWorker.retrieve", state);
-            } catch (AmqpException ex) {
-                throw new RuntimeException("rabbitmq异常，具体发生在MilvusFilterRetrieveWorker向gather.topic发送消息的过程中",ex);
-            }
+            return MilvusSearchUtils.getContentsFromSearchResp((SearchResp) searchResults);
+        } catch (Exception e) {
+            log.error("解析Milvus搜索结果失败", e);
+            return List.of();
         }
-
     }
 }

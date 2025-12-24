@@ -37,7 +37,7 @@ public class MilvusFilterContentRetriever implements ContentRetriever {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, topK);
+        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, 0, topK);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 

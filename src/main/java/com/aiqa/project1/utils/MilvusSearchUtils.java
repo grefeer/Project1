@@ -70,6 +70,13 @@ public class MilvusSearchUtils {
                 .build());
 
         schema.addField(AddFieldReq.builder()
+                .fieldName("session_id")
+                .dataType(DataType.Int64)
+                .isPrimaryKey(false)
+                .autoID(false)
+                .build());
+
+        schema.addField(AddFieldReq.builder()
                 .fieldName("title")
                 .dataType(DataType.VarChar)
                 .maxLength(200)
@@ -161,52 +168,6 @@ public class MilvusSearchUtils {
         milvusClient.createCollection(createCollectionReq);
     }
 
-    /**
-     * 像milvus中注入数据
-     * @param texts
-     * @param userId
-     * @return
-     */
-    public boolean insert(Object texts, Integer userId) {
-        Gson gson = new Gson();
-        InsertReq insertReq = null;
-        String userCollectionName = collectionName + "_" +userId.toString();
-
-        if (texts != null) {
-            if (texts instanceof String text) {
-                JsonObject row = new JsonObject();
-                row.addProperty("text", text);
-                row.addProperty("title", "text");
-
-                float[] text_dense1 = onnxMiniLML12V2EmbeddingModel.embed(text).content().vector();
-                row.add("text_dense", gson.toJsonTree(text_dense1));
-                insertReq = InsertReq.builder()
-                        .collectionName(userCollectionName)
-                        .data(Collections.singletonList(row))
-                        .build();
-            } else if (texts instanceof List<?> && ((List<?>) texts).getFirst() instanceof String) {
-                List<JsonObject> data = new ArrayList<>();
-                for (Object text : (List<?>) texts) {
-                    JsonObject row = new JsonObject();
-                    String text_ = (String) text;
-                    row.addProperty("text", text_);
-                    row.addProperty("title", "text");
-                    float[] text_dense1 = onnxMiniLML12V2EmbeddingModel.embed(text_).content().vector();
-                    row.add("text_dense", gson.toJsonTree(text_dense1));
-                    data.add(row);
-                    insertReq = InsertReq.builder()
-                            .collectionName(userCollectionName)
-                            .data(data)
-                            .build();
-                }
-            } else {
-                return false;
-            }
-            milvusClient.insert(insertReq);
-            return true;
-        }
-        return false;
-    }
 
     /**
      * 混合查询，即稀疏+稠密（向量）查询
@@ -221,6 +182,7 @@ public class MilvusSearchUtils {
             String query,
             String keywords,
             Integer userId,
+            Integer sessionId,
             int topK,
             Object rerankerParams
     ) {
@@ -236,12 +198,14 @@ public class MilvusSearchUtils {
                 .vectors(queryDenseVectors)
                 .params("{\"nprobe\": 10, \"ef\": 50, \"M\": 16}")
                 .topK(topK)
+                .expr((sessionId == 0) ? "":"session_id==%s".formatted(sessionId))
                 .build());
         searchRequests.add(AnnSearchReq.builder()
                 .vectorFieldName("text_sparse")
                 .vectors(queryTexts)
                 .params("{\"drop_ratio_search\": 0.2}")
                 .topK(topK)
+                .expr((sessionId == 0) ? "":"session_id==%s".formatted(sessionId))
                 .build());
 
 
@@ -284,14 +248,24 @@ public class MilvusSearchUtils {
      * @param outputFields 需要返回的字段列表
      * @return 查询结果
      */
-    public QueryResp filterByComeFromExact(Integer userId,
-                                           String targetValue,
-                                           List<String> outputFields) throws Exception {
+    public QueryResp filterByComeFromExact(
+            Integer userId,
+            Integer sessionId,
+            String targetValue,
+            List<String> outputFields
+    ) throws Exception {
+        List<String> filterConditions = new ArrayList<>();
+
         // 构建过滤表达式：字符串需用双引号包裹
         String filterExpr = String.format("come_from == \"%s\"", targetValue);
+        filterConditions.add(filterExpr);
+        if (sessionId != -1) {
+            filterConditions.add(String.format("session_id == %d", sessionId));
+        }
+
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
-                .filter(filterExpr)
+                .filter(String.join(" AND ", filterConditions))
                 .outputFields(outputFields)
                 .build();
 
@@ -307,6 +281,7 @@ public class MilvusSearchUtils {
      * @return 查询结果
      */
     public QueryResp filterByComeFromIn(Integer userId,
+                                        Integer sessionId,
                                         List<String> values,
                                         List<String> outputFields) throws Exception {
         // 构建 in 表达式：数组元素用双引号包裹
@@ -317,13 +292,18 @@ public class MilvusSearchUtils {
                 valuesStr.append(", ");
             }
         }
+        
+        List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from in [%s]", valuesStr);
-
+        filterConditions.add(filterExpr);
+        if (sessionId != -1) {
+            filterConditions.add(String.format("session_id == %d", sessionId));
+        }
         System.out.println("filterExpr:" + filterExpr);
 
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
-                .filter(filterExpr)
+                .filter(String.join(" AND ", filterConditions))
                 .outputFields(outputFields)
                 .build();
 
@@ -339,13 +319,20 @@ public class MilvusSearchUtils {
      * @return 查询结果
      */
     public QueryResp filterByComeFromNotEqual(Integer userId,
+                                                    Integer sessionId,
                                                     String excludeValue,
                                                     List<String> outputFields) throws Exception {
-        String filterExpr = String.format("come_from != \"%s\"", excludeValue);
+        
+        List<String> filterConditions = new ArrayList<>();
+        String filterExpr = String.format("come_from == \"%s\"", excludeValue);
+        filterConditions.add(filterExpr);
+        if (sessionId != -1) {
+            filterConditions.add(String.format("session_id == %d", sessionId));
+        }
 
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
-                .filter(filterExpr)
+                .filter(String.join(" AND ", filterConditions))
                 .outputFields(outputFields)
                 .build();
 
@@ -365,6 +352,7 @@ public class MilvusSearchUtils {
             String query,
             String filteredWords,
             Integer userId,
+            Integer sessionId,
             int topK
     ) {
         float[] queryDense = onnxMiniLML12V2EmbeddingModel.embed(query).content().vector();
@@ -375,13 +363,18 @@ public class MilvusSearchUtils {
         searchParamsMap.put("ef", "50");
         searchParamsMap.put("anns_field", "text_dense");
 
+        List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from == \"%s\"", filteredWords);
+        filterConditions.add(filterExpr);
+        if (sessionId != -1) {
+            filterConditions.add(String.format("session_id == %d", sessionId));
+        }
 
         SearchReq searchReq = SearchReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .data(queryVector)
                 .topK(topK)
-                .filter(filterExpr) // 详见https://milvus.io/docs/zh/boolean.md
+                .filter(String.join(" AND ", filterConditions)) // 详见https://milvus.io/docs/zh/boolean.md
                 .outputFields(Arrays.asList("text", "come_from", "title", "author"))
                 .searchParams(searchParamsMap)
                 .build();
@@ -436,6 +429,7 @@ public class MilvusSearchUtils {
             Map<String, Object> textSegmentMetadata = new HashMap<>();
 
             String comeFrom = (String) entity.get("come_from");
+            System.out.println("comeFrom:" + comeFrom);
             if (comeFrom != null) {
                 textSegmentMetadata.put("come_from", comeFrom); // 存储来源信息
             }
@@ -487,6 +481,7 @@ public class MilvusSearchUtils {
             // 构建TextSegment的元数据（包含来源信息）
             Map<String, Object> textSegmentMetadata = new HashMap<>();
             String comeFrom = (String) entity.get("come_from");
+            System.out.println("comeFrom:" + comeFrom);
             if (comeFrom != null) {
                 textSegmentMetadata.put("come_from", comeFrom); // 存储来源信息
             }

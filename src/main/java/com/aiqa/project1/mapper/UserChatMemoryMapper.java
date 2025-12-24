@@ -5,3 +5,5 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 
 public interface UserChatMemoryMapper extends BaseMapper<UserChatMemory> {
 }
+
+

@@ -22,10 +22,14 @@ public class StateProducer {
                 userId,
                 sessionId,
                 memoryId,
-                "用户:\n" + query
+                "<用户问题>" + query
         );
 
-        Long idx = redisStoreUtils.setChatMemory(userId, sessionId, query);
+        Long idx = redisStoreUtils.setChatMemory(userId, sessionId, "<用户问题>" + query);
+
+        // 存入当前活跃的 Session ID, 如果存在，则更新前活跃的 Session ID的时间
+        redisStoreUtils.setOrIncreaseActivateSessionId(userId, sessionId);
+
         if (idx != null && idx > 0) {
             rabbitTemplate.convertAndSend("Start", "start", state);
         }

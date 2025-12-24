@@ -39,7 +39,7 @@ public class MilvusHybridContentRetriever implements ContentRetriever {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, topK, rerankerParams);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, 0, topK, rerankerParams);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 

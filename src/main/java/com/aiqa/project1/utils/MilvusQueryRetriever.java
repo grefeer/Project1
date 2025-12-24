@@ -21,7 +21,7 @@ public class MilvusQueryRetriever {
         this.milvusSearchUtils = milvusSearchUtils;
     }
 
-    public List<Content> retrieve(Integer userId, Object filteredWords, Boolean equalFlag, Query query) {
+    public List<Content> retrieve(Integer userId,Integer sessionId, Object filteredWords, Boolean equalFlag, Query query) {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
@@ -29,15 +29,15 @@ public class MilvusQueryRetriever {
         try {
             if (filteredWords instanceof String ) {
                 if (equalFlag) {
-                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
+                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, sessionId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
                 } else {
-                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
+                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, sessionId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
                 }
 
             } else if (filteredWords instanceof List) {
                 List<String> filteredWordsList = new ArrayList<>();
                 ((List<?>) filteredWords).forEach(word -> filteredWordsList.add(word.toString()));
-                queryResp= milvusSearchUtils.filterByComeFromIn(userId, filteredWordsList, List.of("come_from", "text", "title", "author"));
+                queryResp= milvusSearchUtils.filterByComeFromIn(userId, sessionId, filteredWordsList, List.of("come_from", "text", "title", "author"));
             }
             else {
                 throw new RuntimeException("MilvusContentRetriever requires filtered words");

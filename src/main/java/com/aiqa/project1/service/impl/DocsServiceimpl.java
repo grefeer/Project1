@@ -67,7 +67,7 @@ public class DocsServiceimpl implements DocsService {
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            abstractStr = dataProcessUtils.DataProcess(userId, file);
+            abstractStr = dataProcessUtils.processDocument(userId, Integer.valueOf(sessionId), file);
 
             description = (description == null) ? abstractStr : description;
 
@@ -94,9 +94,15 @@ public class DocsServiceimpl implements DocsService {
 
         for (int i = 0; i < fileSize; i++) {
             MultipartFile multipartFile = files.get(i);
-            String documentName = documentNames.get(i);
             try {
-                abstractStr = dataProcessUtils.DataProcess(userId, multipartFile);
+                // 删除旧的
+                try {
+                    milvusSearchUtils.deleteDocumentEmbeddingsByName(multipartFile.getOriginalFilename(), userId);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                abstractStr = dataProcessUtils.processDocument(userId, Integer.valueOf(sessionId), multipartFile);
 
                 data.getSuccessList().add(
                             uploadSingleDocumentUnits(
@@ -106,12 +112,7 @@ public class DocsServiceimpl implements DocsService {
                                     sessionId
                             ));
                     successCount.getAndIncrement();
-                // 删除旧的
-                try {
-                    milvusSearchUtils.deleteDocumentEmbeddingsByName(multipartFile.getOriginalFilename(), userId);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+
             } catch (BusinessException e) {
                 log.error(e.getMessage());
                 data.getFailList().add(e);
@@ -131,9 +132,9 @@ public class DocsServiceimpl implements DocsService {
 //                }
 //            }, uploadExecutor);
 //            futures.add(future);
+//        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         }
 
-//        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
 
         result.setData(data);

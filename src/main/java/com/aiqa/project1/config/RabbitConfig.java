@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.ExecutorService;
 
@@ -101,13 +102,13 @@ public class RabbitConfig {
 
     @Autowired
     @Qualifier("qaTaskExecutor")
-    ExecutorService executor;
+    ThreadPoolTaskExecutor executor;
 
     @Bean("customContainerFactory")
     public SimpleRabbitListenerContainerFactory containerFactory(SimpleRabbitListenerContainerFactoryConfigurer configurer,
                                                                  ConnectionFactory connectionFactory) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
-        factory.setTaskExecutor(executor);
+        factory.setTaskExecutor(executor.getThreadPoolExecutor());
         factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
         factory.setConcurrentConsumers(5);
         factory.setMaxConcurrentConsumers(10);

@@ -19,19 +19,19 @@ public class MilvusFilterRetriever {
         this.milvusSearchUtils = milvusSearchUtils;
     }
 
-    public List<Content> retrieve(Integer userId, String filteredWords, Integer topK, Query query) {
+    public List<Content> retrieve(Integer userId, Integer sessionId, String filteredWords, Integer topK, Query query) {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, topK);
+        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, sessionId, topK);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
-    public List<Content> retrieveTopK10(Integer userId, String filteredWords, Query query) {
+    public List<Content> retrieveTopK10(Integer userId, Integer sessionId, String filteredWords, Query query) {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, 10);
+        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, sessionId, 10);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 

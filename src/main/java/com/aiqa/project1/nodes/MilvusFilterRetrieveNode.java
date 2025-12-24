@@ -40,7 +40,7 @@ public class MilvusFilterRetrieveNode implements Node{
         String keywords = douBaoLite.chat(prompt1);
 
 
-        retrievalInfo.addAll(milvusFilterRetriever.retrieveTopK10(userId, keywords, Query.from(query)));
+        retrievalInfo.addAll(milvusFilterRetriever.retrieveTopK10(userId, state.getSessionId(), keywords, Query.from(query)));
         return state;
 
     }

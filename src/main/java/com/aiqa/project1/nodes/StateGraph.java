@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 /**
  *
  */
-@Component
+//@Component
 public class StateGraph implements Node{
     private final OpenAiChatModel douBaoLite;
     private final MilvusHybridRetrieveNode milvusHybridRetrieveNode;

@@ -43,7 +43,7 @@ public class MilvusQueryRetrieveNode implements Node{
         List<String> threadSafeKeywordsList = Collections.synchronizedList(new ArrayList<>());
         Collections.addAll(threadSafeKeywordsList, keywords.split(","));
 
-        retrievalInfo.addAll(milvusQueryRetriever.retrieve(userId, threadSafeKeywordsList, true, Query.from(query)));
+        retrievalInfo.addAll(milvusQueryRetriever.retrieve(userId, state.getSessionId(), threadSafeKeywordsList, true, Query.from(query)));
         return state;
 
     }

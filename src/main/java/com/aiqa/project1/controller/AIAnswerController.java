@@ -7,6 +7,7 @@ import com.aiqa.project1.service.impl.QuestionAnsweringService;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.JwtUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,15 +19,17 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/qa")
 public class AIAnswerController {
-    @Autowired
-    QuestionAnsweringService questionAnsweringService;
-    private static final Logger log = LoggerFactory.getLogger(UserController.class);
-//    private final Map<String, ScheduledFuture<?>> tasksMap = new ConcurrentHashMap<>();
-    @Autowired
-    private RedisStoreUtils redisStoreUtils;
 
-//    @Autowired
-//    private ThreadPoolTaskScheduler scheduler;
+    private final QuestionAnsweringService questionAnsweringService;
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
+
+    private final RedisStoreUtils redisStoreUtils;
+
+    public AIAnswerController(QuestionAnsweringService questionAnsweringService, RedisStoreUtils redisStoreUtils) {
+        this.questionAnsweringService = questionAnsweringService;
+        this.redisStoreUtils = redisStoreUtils;
+    }
+
 
     /**
      * 只把问题发送给大模型，让其回答
@@ -43,83 +46,77 @@ public class AIAnswerController {
         Integer sessionId = Integer.valueOf(paramMap.get("sessionId"));
         Integer userId = Integer.parseInt(JwtUtils.getUserIdFromToken(token));
         Map<String, Object> data = new HashMap<>();
-//        String taskKey = "%s_%s".formatted(userId, sessionId);
 
-        Result resp = new Result();
-
-        try {
-            Integer memoryId= Math.toIntExact(redisStoreUtils.getChatMemoryCount(userId, sessionId));
-            // -1是用于测试
-            questionAnsweringService.answerQuestion(userId, sessionId, memoryId, question);
-
-//            if (! tasksMap.containsKey(taskKey)) {
-//                // 2. 定义数据检查任务逻辑
-//                Runnable dataCheckTask = () -> {
-//                    List<?> chatMemoryList = redisStoreUtils.getAllChatMemory(userId, sessionId);
-//                    if (chatMemoryList == null || chatMemoryList.isEmpty()) return;
-//
-//                    // 根据redis更新mysql
-//                    userChatMemoryMapper.insertOrUpdate(
-//                            chatMemoryList.stream()
-//                                    .map(o -> new UserChatMemory(userId, sessionId, memoryId, (String) o))
-//                                    .toList());
-//                };
-//
-//                ScheduledFuture<?> dataCheckFuture = scheduler.scheduleAtFixedRate(
-//                        dataCheckTask,
-//                        Instant.now(),  // 初始延迟（毫秒）
-//                        Duration.ofSeconds(30)   // 执行周期（毫秒）
-//                );
-//                tasksMap.put(taskKey, dataCheckFuture);
-//            }
-
-
-            data.put("userId", userId);
-            data.put("sessionId", sessionId);
-            return Result.define(200,"任务已提交", data);
-        } catch (BusinessException e) {
-            resp.setCode(e.getCode());
-            resp.setMessage(e.getMessage());
-            resp.setData(null);
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-            resp.setCode(ResponseCode.SERVER_ERROR.getCode());
-            resp.setMessage(ResponseCode.SERVER_ERROR.getMessage());
-            resp.setData(null);
-        }
-        return resp;
+        return questionAnsweringService.queryRegister(userId, sessionId, question, data);
     }
+
 
     /**
      * 流式回答反馈
      * @param sessionId
      * @param token
-     * @return
+     * @return json格式相应，code：状态码，message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
+     *         sessionId是当前会话的Id，answer是回答，currentChatMemoryCount是返回的对话数
      */
     @GetMapping("/status")
-    public Result getStatus(@RequestParam Integer sessionId, @RequestHeader("Authorization") String token) {
+    public Result getStatus(
+            @RequestParam Integer sessionId,
+            @RequestParam Integer memoryId,
+            @RequestHeader("Authorization") String token
+    ) {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
 
-        // 从 Redis 获取当前最新的回答内容
-        String currentAnswer = redisStoreUtils.getLastChatMemory(userId, sessionId);
+        return questionAnsweringService.getAnswerStatus(sessionId, userId, memoryId);
+    }
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("answer", currentAnswer);
-        data.put("sessionId", sessionId);
+    /**
+     * 获取该用户的所有session的元数据
+     * @param token
+     * @return json格式相应，code：状态码，message：状态信息，data：一个map，键是sessionId 值是session名称
+     */
+    @GetMapping("/chatMemory")
+    public Result getChatMemory(
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        return questionAnsweringService.getChatMemory(userId);
+    }
 
-        if (currentAnswer == null) {
-            return Result.define(202, "AI 正在思考中...", data);
-        } else if (currentAnswer.contains("<最终回答>")) {
-            // 状态：已完成
-            return Result.define(200, "回答完成", data);
-        } else if (currentAnswer.contains("<AI回答>")){
-            // 状态：生成中（中间过程）
-            return Result.define(206, "AI 正在输出...", data);
-        } else {
-            // 状态：生成中
-            return Result.define(202, "AI 正在思考中...", data);
-        }
+    /**
+     * 获取历史消息
+     * @param sessionId
+     * @param token
+     * @return json格式相应，code：状态码，message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
+     *         sessionId是当前会话的Id，answer是历史消息，currentChatMemoryCount是返回的对话数
+     */
+    @GetMapping("/chatMemory/{sessionId}")
+    public Result getChatMemoryBySessionId(
+            @PathVariable Integer sessionId,
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        return questionAnsweringService.getAnswerStatus(sessionId, userId, 0);
+    }
+
+    /**
+     * 前端发现session的对话数到达一定个数后，发送给后端，让后端给这个session起名字
+     * @param sessionId
+     * @param token
+     * @return json格式相应，code：状态码，message：状态信息，data：该session的名字，以的格式发送字符串
+     */
+    @GetMapping("/chatMemory/reName/{sessionId}")
+    public Result reNameChatMemoryBySessionId(
+            @PathVariable Integer sessionId,
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        return questionAnsweringService.reNameChatMemoryBySessionId(userId, sessionId);
+    }
+
+    @PostMapping("/chatMemory/delete/{sessionId}/{memoryId}")
+    public Result deleteChatMemoryBySessionId(
+            @PathVariable Integer sessionId,
+            @PathVariable Integer memoryId,
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        return questionAnsweringService.deleteChatMemory(userId, sessionId, memoryId);
     }
 
 }

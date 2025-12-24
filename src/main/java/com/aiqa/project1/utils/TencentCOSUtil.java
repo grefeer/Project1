@@ -257,7 +257,7 @@ public class TencentCOSUtil {
 
 
     public String getOssPath(String userId, String documentId, String documentName, Long version) {
-        return userId + "/" + documentId + "/" + version + "/" + documentName;
+        return URLEncoder.encode(userId + "/" + documentId + "/" + version + "/" + documentName, StandardCharsets.UTF_8);
     }
 
     // 自定义重试策略

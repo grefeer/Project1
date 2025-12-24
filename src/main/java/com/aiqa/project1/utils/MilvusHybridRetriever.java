@@ -21,35 +21,35 @@ public class MilvusHybridRetriever {
     }
 
 
-    public List<Content> retrieve(Integer userId, String keywords, Object rerankerParams, Integer topK, Query query) {
+    public List<Content> retrieve(Integer userId, Integer sessionId, String keywords, Object rerankerParams, Integer topK, Query query) {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, topK, rerankerParams);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, topK, rerankerParams);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
-    public List<Content> retrieveTopK10(Integer userId, String keywords, Object rerankerParams, Query query) {
+    public List<Content> retrieveTopK10(Integer userId, Integer sessionId, String keywords, Object rerankerParams, Query query) {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, 10, rerankerParams);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 10, rerankerParams);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
-    public List<Content> retrieveTopK10WithRRF(Integer userId, String keywords, Query query) {
+    public List<Content> retrieveTopK10WithRRF(Integer userId, Integer sessionId, String keywords, Query query) {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, 10, 60);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 10, 60);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
-    public List<Content> retrieveTopK5WithRRF(Integer userId, String keywords, Query query) {
+    public List<Content> retrieveTopK5WithRRF(Integer userId, Integer sessionId, String keywords, Query query) {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, 5, 60);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 5, 60);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 

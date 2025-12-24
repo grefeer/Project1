@@ -39,15 +39,15 @@ public class MilvusQueryContentRetriever implements ContentRetriever {
         try {
             if (filteredWords instanceof String ) {
                 if (equalFlag) {
-                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, filteredWords.toString(), List.of("come_from"));
+                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, 0, filteredWords.toString(), List.of("come_from"));
                 } else {
-                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, filteredWords.toString(), List.of("come_from"));
+                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, 0, filteredWords.toString(), List.of("come_from"));
                 }
 
             } else if (filteredWords instanceof List) {
                 List<String> filteredWordsList = new ArrayList<>();
                 ((List<?>) filteredWords).forEach(word -> filteredWordsList.add(word.toString()));
-                queryResp= milvusSearchUtils.filterByComeFromIn(userId, filteredWordsList, List.of("come_from"));
+                queryResp= milvusSearchUtils.filterByComeFromIn(userId, 0, filteredWordsList, List.of("come_from"));
             }
             else {
                 throw new RuntimeException("MilvusContentRetriever requires filtered words");

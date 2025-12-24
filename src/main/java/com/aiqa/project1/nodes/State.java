@@ -24,6 +24,7 @@ public class State {
     private Integer maxRetrievalCount = 1000;
     private String retrievalQuery;
     private Boolean retrievalDBFlag = true;
+    private Boolean retrievalGlobalFlag = false;
 
     public State(Integer userId, Integer sessionId, Integer memoryId, String query) {
         this.userId = userId;

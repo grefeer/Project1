@@ -1,8 +1,5 @@
 package com.aiqa.project1.worker;
 
-
-
-
 public enum MilvusRetrieverName {
     // 1. 混合检索节点：结合向量和关键词搜索（适用于大多数复杂问题）
     HYBRID_RETRIEVER(MilvusHybridRetrieveWorker.class),
