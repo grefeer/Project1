@@ -52,10 +52,10 @@ public class AIAnswerController {
 
 
     /**
-     * 流式回答反馈
+     * 流式回答反馈，每次返回部分思考或者回答
      * @param sessionId
      * @param token
-     * @return json格式相应，code：状态码，message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
+     * @return json格式相应，code：状态码（200返回部分回答数据，回答完成，206返回部分回答数据，但是没回答完，其他失败），message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
      *         sessionId是当前会话的Id，answer是回答，currentChatMemoryCount是返回的对话数
      */
     @GetMapping("/status")
@@ -85,7 +85,7 @@ public class AIAnswerController {
      * 获取历史消息
      * @param sessionId
      * @param token
-     * @return json格式相应，code：状态码，message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
+     * @return json格式相应，code：状态码（200回答完成，206返回部分回答数据，但是没回答完，其他失败），message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
      *         sessionId是当前会话的Id，answer是历史消息，currentChatMemoryCount是返回的对话数
      */
     @GetMapping("/chatMemory/{sessionId}")
@@ -100,7 +100,7 @@ public class AIAnswerController {
      * 前端发现session的对话数到达一定个数后，发送给后端，让后端给这个session起名字
      * @param sessionId
      * @param token
-     * @return json格式相应，code：状态码，message：状态信息，data：该session的名字，以的格式发送字符串
+     * @return json格式相应，code：状态码（200成功，其他失败），message：状态信息，data：该session的名字，以的格式发送字符串
      */
     @GetMapping("/chatMemory/reName/{sessionId}")
     public Result reNameChatMemoryBySessionId(
@@ -110,6 +110,13 @@ public class AIAnswerController {
         return questionAnsweringService.reNameChatMemoryBySessionId(userId, sessionId);
     }
 
+    /**
+     * 删除指定session的指定memory
+     * @param sessionId
+     * @param memoryId
+     * @param token
+     * @return json格式相应，code：状态码（200成功，其他失败），message：状态信息，data：null
+     */
     @PostMapping("/chatMemory/delete/{sessionId}/{memoryId}")
     public Result deleteChatMemoryBySessionId(
             @PathVariable Integer sessionId,
