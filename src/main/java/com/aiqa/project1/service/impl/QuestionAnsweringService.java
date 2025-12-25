@@ -1,9 +1,11 @@
 package com.aiqa.project1.service.impl;
 
 
+import com.aiqa.project1.mapper.SessionChatMapper;
 import com.aiqa.project1.mapper.UserChatMemoryMapper;
 import com.aiqa.project1.pojo.ResponseCode;
 import com.aiqa.project1.pojo.Result;
+import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.SessionChatDTO;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.aiqa.project1.utils.CacheAsideUtils;
@@ -42,12 +44,15 @@ public class QuestionAnsweringService {
     5. 避免使用专业术语或对话中未提及的信息
     请在<标题>标签内输出你总结的标题。
     """;
-    public QuestionAnsweringService(StateProducer stateProducer, RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite) {
+    private final SessionChatMapper sessionChatMapper;
+
+    public QuestionAnsweringService(StateProducer stateProducer, RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite, SessionChatMapper sessionChatMapper) {
         this.stateProducer = stateProducer;
         this.redisStoreUtils = redisStoreUtils;
         this.userChatMemoryMapper = userChatMemoryMapper;
         this.cacheAsideUtils = cacheAsideUtils;
         this.douBaoLite = douBaoLite;
+        this.sessionChatMapper = sessionChatMapper;
     }
 
     /**
@@ -75,31 +80,30 @@ public class QuestionAnsweringService {
         if (currentChatMemoryCount < memoryId.longValue()) {
             return Result.define(202, "AI 正在思考中...", null);
         } else {
+            int count = currentChatMemoryCount - memoryId;
+            if (count <= 0) return Result.define(202, "AI 正在思考中...", null); // 至少获取当前最新的一条
+
+            System.out.println(currentChatMemoryCount + ":" + memoryId);
             // 从 Redis 获取当前最新的回答内容
-            String currentAnswer = redisStoreUtils.getChatMemory(
+            List<String> currentAnswer = redisStoreUtils.getChatMemory(
                     userId,
                     sessionId,
-                    (currentChatMemoryCount - memoryId + 1))
+                    count)
                     .stream()
                     .map(Object::toString)
-                    .collect(Collectors.joining("\n"));
+                    .toList();
 
             Map<String, Object> data = new HashMap<>();
             data.put("answer", currentAnswer);
             data.put("sessionId", sessionId);
             data.put("currentChatMemoryCount", currentChatMemoryCount);
-
             if (currentAnswer == null) {
-                return Result.define(202, "AI 正在思考中...", null);
-            } else if (currentAnswer.contains("<最终回答>")) {
+                return Result.define(202, "AI 正在思考中...", data);
+            } else if (currentAnswer.getLast().contains("<最终回答>")) {
                 // 状态：已完成
-                return Result.define(200, "回答完成", data);
-            } else if (currentAnswer.contains("<AI思考>") || currentAnswer.contains("<系统改进建议>")){
-                // 状态：生成中（中间过程）
-                return Result.define(206, "AI 正在思考中...", data);
+                return Result.define(200, "回答完毕", data);
             } else {
-                // 状态：生成中
-                return Result.define(202, "AI 正在思考中...", null);
+                return Result.define(206, "正在回答", data);
             }
         }
     }
@@ -131,6 +135,7 @@ public class QuestionAnsweringService {
 //            }
             data.put("userId", userId);
             data.put("sessionId", sessionId);
+            data.put("memoryId", memoryId);
             return Result.define(200, "任务已提交", data);
         } catch (Exception e) {
             e.printStackTrace();
@@ -176,6 +181,7 @@ public class QuestionAnsweringService {
             return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
         }
     }
+
     /**
      * 从Redis或者MySQL中读取session的整体内容并返回
      * @param userId
@@ -184,8 +190,42 @@ public class QuestionAnsweringService {
     @NotNull
     public Result getChatMemory(Integer userId) {
         try {
-            Map<Integer, String> userChatMemoryList = cacheAsideUtils.getAllSessionChat(userId);
+            Map<String, String> userChatMemoryList = cacheAsideUtils.getAllSessionChat(userId);
             return Result.define(200, "任务已提交", userChatMemoryList);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
+        }
+    }
+
+    /**
+     * 从Redis或者MySQL中创建session的整体内容
+     * @param userId
+     * @return
+     */
+    @NotNull
+    public Result createSession(Integer userId) {
+        try {
+            QueryWrapper<SessionChat> queryWrapper = new QueryWrapper<>();
+            QueryWrapper<UserChatMemory> queryWrapper_ = new QueryWrapper<>();
+
+            queryWrapper.eq("user_id", userId)
+                    .select("max(session_id) as session_id");
+            SessionChat sessionChat = sessionChatMapper.selectOne(queryWrapper);
+
+            queryWrapper_.eq("session_id", sessionChat.getSessionId());
+            Integer maxSessionId = (sessionChat != null) ? sessionChat.getSessionId() : 1;
+
+            if(userChatMemoryMapper.selectOne(queryWrapper_) != null)
+                maxSessionId += 1;
+
+            String result = cacheAsideUtils.getSessionChat(userId, maxSessionId);
+            if (result != null) {
+                return Result.define(200, "会话已存在", Map.of("sessionName", result, "sessionId", maxSessionId));
+            } else {
+                cacheAsideUtils.setSessionChat(userId, maxSessionId, "新会话" + maxSessionId);
+                return Result.define(200, "任务已提交", Map.of("sessionName", "新会话" + maxSessionId, "sessionId", maxSessionId));
+            }
         } catch (Exception e) {
             e.printStackTrace();
             return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);

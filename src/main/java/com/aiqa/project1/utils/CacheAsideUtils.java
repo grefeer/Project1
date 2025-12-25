@@ -6,6 +6,7 @@ import com.aiqa.project1.mapper.UserChatMemoryMapper;
 import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Component;
@@ -60,7 +61,10 @@ public class CacheAsideUtils {
             QueryWrapper<SessionChat> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("user_id", userId);
             queryWrapper.eq("session_id", sessionId);
-            result = sessionChatMapper.selectOne(queryWrapper).getSessionName();
+            SessionChat sessionChat = sessionChatMapper.selectOne(queryWrapper);
+            if (sessionChat == null) return null;
+
+            result = sessionChat.getSessionName();
             if (result != null) {
                 redisStoreUtils.setSessionChat(userId, sessionId, result);
             }
@@ -74,21 +78,26 @@ public class CacheAsideUtils {
      * 读SessionChat（带重试机制）
      * @param userId
      */
-    public Map<Integer, String> getAllSessionChat(Integer userId) {
+    public Map<String, String> getAllSessionChat(Integer userId) {
         try {
             Map<Object, Object> sessionChat = redisStoreUtils.getAllSessionChat(userId);
             // redis命中
-            Map<Integer, String> result = new HashMap<>();
-            sessionChat.forEach((o, o2) -> result.put((Integer) o, (String) o2));
-            if (result != null) {
+            Map<String, String> result = new HashMap<>();
+            sessionChat.forEach((o, o2) -> result.put((String) o, (String) o2));
+
+            if (result != null && !result.isEmpty()) {
                 return result;
             }
 
             QueryWrapper<SessionChat> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("user_id", userId);
-            Map<Integer, String> map = sessionChatMapper.selectList(queryWrapper)
+            List<SessionChat> sessionChats = sessionChatMapper.selectList(queryWrapper);
+            System.out.println(sessionChats);
+            Map<String, String> map = sessionChats
                     .stream()
-                    .collect(Collectors.toMap(SessionChat::getSessionId, SessionChat::getSessionName));
+                    .collect(Collectors.toMap(sessionChat1 -> sessionChat1.getSessionId().toString(), SessionChat::getSessionName));
+
+            System.out.println(map);
             if (map != null) {
                 redisStoreUtils.setBatchSessionChat(userId, map);
             }
@@ -174,9 +183,15 @@ public class CacheAsideUtils {
     public Boolean deleteChatMemory(Integer userId, Integer sessionId, Integer memoryId) {
         try {
             Boolean flag = redisStoreUtils.deleteChatMemory(userId, sessionId, memoryId);
-            QueryWrapper<UserChatMemory> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("user_id", userId).eq("session_id", sessionId).eq("memory_id", memoryId);
-            int cnt = userChatMemoryMapper.delete(queryWrapper);
+            String deletedContent = String.format("<编号%d对话已删除>", memoryId);
+
+            UpdateWrapper<UserChatMemory> queryWrapper = new UpdateWrapper<>();
+            queryWrapper
+                    .eq("user_id", userId)
+                    .eq("session_id", sessionId)
+                    .eq("memory_id", memoryId)
+                    .set("content", deletedContent);
+            int cnt = userChatMemoryMapper.update(queryWrapper);
             return flag && cnt > 0;
         } catch (Exception e) {
             throw new RuntimeException(e);

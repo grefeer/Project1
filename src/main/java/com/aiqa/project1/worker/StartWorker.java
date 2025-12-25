@@ -94,7 +94,7 @@ public class StartWorker {
         } else {
             state.setRetrievalDBFlag(false);
             redisStoreUtils.putRetrievalCount(state.getUserId(), sessionId , state.getMemoryId(), 1);
-            rabbitTemplate.convertAndSend("WebSearch", "WebSearch.retrieve", state);
+            rabbitTemplate.convertAndSend("Retrieve", "WebSearch.retrieve", state);
         }
 
     }

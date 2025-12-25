@@ -66,7 +66,9 @@ public class AIAnswerController {
     ) {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
 
-        return questionAnsweringService.getAnswerStatus(sessionId, userId, memoryId);
+        Result answerStatus = questionAnsweringService.getAnswerStatus(sessionId, userId, memoryId);
+        System.out.println("answerStatus:" + answerStatus);
+        return answerStatus;
     }
 
     /**
@@ -78,7 +80,23 @@ public class AIAnswerController {
     public Result getChatMemory(
             @RequestHeader("Authorization") String token) {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
-        return questionAnsweringService.getChatMemory(userId);
+        Result chatMemory = questionAnsweringService.getChatMemory(userId);
+        System.out.println("chatMemory:" + chatMemory);
+        return chatMemory;
+    }
+
+    /**
+     * 创建新的session
+     * @param token
+     * @return json格式相应，code：状态码，message：状态信息，data：一个map，键是sessionId 值是session名称
+     */
+    @GetMapping("/chatMemory/create")
+    public Result createSession(
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        Result session = questionAnsweringService.createSession(userId);
+        System.out.println("session:" + session);
+        return session;
     }
 
     /**
@@ -88,12 +106,15 @@ public class AIAnswerController {
      * @return json格式相应，code：状态码（200回答完成，206返回部分回答数据，但是没回答完，其他失败），message：状态信息，data：一个map，包含以下键值对：sessionId，answer，currentChatMemoryCount，
      *         sessionId是当前会话的Id，answer是历史消息，currentChatMemoryCount是返回的对话数
      */
-    @GetMapping("/chatMemory/{sessionId}")
+    @GetMapping("/chatMemory/{sessionId:\\d+}")
     public Result getChatMemoryBySessionId(
             @PathVariable Integer sessionId,
             @RequestHeader("Authorization") String token) {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
-        return questionAnsweringService.getAnswerStatus(sessionId, userId, 0);
+        Result result = questionAnsweringService.getAnswerStatus(sessionId, userId, 0);
+        System.out.println("发送：");
+        System.out.println(result);
+        return result;
     }
 
     /**
@@ -117,7 +138,7 @@ public class AIAnswerController {
      * @param token
      * @return json格式相应，code：状态码（200成功，其他失败），message：状态信息，data：null
      */
-    @PostMapping("/chatMemory/delete/{sessionId}/{memoryId}")
+    @DeleteMapping("/chatMemory/delete/{sessionId}/{memoryId}")
     public Result deleteChatMemoryBySessionId(
             @PathVariable Integer sessionId,
             @PathVariable Integer memoryId,
@@ -125,6 +146,14 @@ public class AIAnswerController {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
         return questionAnsweringService.deleteChatMemory(userId, sessionId, memoryId);
     }
+
+    /**
+     * 这个代码是一个智能文档系统的后端代码以及部分前端代码以及部分接口文档，为这个后端代码编写前端代码，要求：
+     * 问答界面主要逻辑如下：一开始会调用“/api/v1/qa/chatMemory”获取所有对话的元信息，包括sessionId以及sessionName；
+     * 之后根据这个在边栏处显示历史对话的sessionName；
+     * 点击新对话之后，调用/api/v1/qa/chatMemory/create/{sessionId}，创建新对话；
+     * 之后用户在问答框发送问题后，把问题传输给/api/v1/qa/ask，之后每2s调用一次 /api/v1/qa/status 流式地返回思考以及回答,
+     */
 
 }
 

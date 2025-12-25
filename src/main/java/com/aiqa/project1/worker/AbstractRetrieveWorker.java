@@ -85,7 +85,7 @@ public abstract class AbstractRetrieveWorker {
             }
 
             Integer userId = state.getUserId();
-            String query = state.getRetrievalQuery();
+            String query = (state.getRetrievalQuery() == null) ? state.getQuery() : state.getRetrievalQuery();
             Integer sessionId = state.getSessionId();
 
                     // 提取关键词

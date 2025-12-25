@@ -2,6 +2,7 @@ package com.aiqa.project1.initializer;
 
 import com.aiqa.project1.mapper.UserMapper;
 import com.aiqa.project1.pojo.user.User;
+import com.aiqa.project1.utils.CacheAsideUtils;
 import com.aiqa.project1.utils.JwtUtils;
 import com.aiqa.project1.utils.UserUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,14 +20,15 @@ public class SystemInitRunner implements CommandLineRunner {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final Environment environment; // 注入环境变量
-
+    private final CacheAsideUtils cacheAsideUtils;
 
 
     @Autowired
-    public SystemInitRunner(UserMapper userMapper, PasswordEncoder passwordEncoder, Environment environment) {
+    public SystemInitRunner(UserMapper userMapper, PasswordEncoder passwordEncoder, Environment environment, CacheAsideUtils cacheAsideUtils) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.environment = environment;
+        this.cacheAsideUtils = cacheAsideUtils;
     }
 
     @Override

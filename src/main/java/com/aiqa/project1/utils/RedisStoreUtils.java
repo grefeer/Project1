@@ -175,14 +175,18 @@ public class RedisStoreUtils {
      */
     public Boolean deleteChatMemory(Integer userId, Integer sessionId, Integer memoryId) {
         String key = SystemConfig.CHAT_MEMORY.formatted(userId, sessionId);
+        String deletedContent = String.format("<编号%d对话已删除>", memoryId);
+
         return redisPoolManager.executeWithRetry(template -> {
+            template.expire(key, DEFAULT_TTL);
             List<Object> memory = template.opsForList().range(key, memoryId, memoryId);
             if (memory == null || memory.isEmpty()) return false;
-            Long removeCount = template.opsForList().remove(key, 0, memory.getFirst());
-            if (removeCount == null || removeCount == 0) {
+            try {
+                template.opsForList().set(key, memoryId, deletedContent);
+            } catch (Exception e) {
+                e.printStackTrace();
                 return false;
             }
-            template.expire(key, DEFAULT_TTL);
             return true;
         });
     }
@@ -259,6 +263,7 @@ public class RedisStoreUtils {
      */
     public List<Object> getChatMemory(Integer userId, Integer sessionId, Integer limit) {
         String key = SystemConfig.CHAT_MEMORY.formatted(userId, sessionId);
+        if (limit == 0) return null;
         return redisPoolManager.executeWithRetry(template -> {
             // 直接使用负数索引：-limit 表示取最后 limit 个元素
             long start = (limit != null && limit > 0) ? -limit : 0;
@@ -366,14 +371,14 @@ public class RedisStoreUtils {
      */
     public Boolean setSessionChat(Integer userId, Integer sessionId, String message) {
         String key = SystemConfig.SESSION_SUMMARY.formatted(userId);
-        return redisPoolManager.executeWithRetry(template -> template.opsForHash().putIfAbsent(key, sessionId, message));
+        return redisPoolManager.executeWithRetry(template -> template.opsForHash().putIfAbsent(key, sessionId.toString(), message));
     }
 
     /**
      * 写多个SessionChat（带重试机制）
      * @param userId
      */
-    public void setBatchSessionChat(Integer userId, Map<Integer, String> map) {
+    public void setBatchSessionChat(Integer userId, Map<String, String> map) {
         String key = SystemConfig.SESSION_SUMMARY.formatted(userId);
         redisPoolManager.executeWithRetry(template -> {
             template.opsForHash().putAll(key, map);
@@ -388,7 +393,7 @@ public class RedisStoreUtils {
      */
     public String getSessionChat(Integer userId, Integer sessionId) {
         String key = SystemConfig.SESSION_SUMMARY.formatted(userId);
-        return (String) redisPoolManager.executeWithRetry(template -> template.opsForHash().get(key, sessionId));
+        return (String) redisPoolManager.executeWithRetry(template -> template.opsForHash().get(key, sessionId.toString()));
     }
 
     /**
@@ -407,7 +412,7 @@ public class RedisStoreUtils {
      */
     public Long removeSessionChat(Integer userId, Integer sessionId) {
         String key = SystemConfig.SESSION_SUMMARY.formatted(userId);
-        return redisPoolManager.executeWithRetry(template -> template.opsForHash().delete(key, sessionId));
+        return redisPoolManager.executeWithRetry(template -> template.opsForHash().delete(key, sessionId.toString()));
     }
 
 
