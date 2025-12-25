@@ -1,10 +1,9 @@
 package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.State;
-import com.aiqa.project1.util.AsyncTaskExecutor;
-import com.aiqa.project1.util.RateLimiter;
-import com.aiqa.project1.util.RedisPoolManager;
-import com.aiqa.project1.util.TimeoutControl;
+import com.aiqa.project1.utils.AsyncTaskExecutor;
+import com.aiqa.project1.utils.RateLimiter;
+import com.aiqa.project1.utils.TimeoutControl;
 import com.aiqa.project1.utils.MilvusFilterRetriever;
 import com.aiqa.project1.utils.MilvusSearchUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
@@ -13,8 +12,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.query.Query;
-import io.milvus.client.MilvusServiceClient;
-import io.milvus.grpc.SearchResults;
 import io.milvus.v2.service.vector.response.SearchResp;
 import lombok.extern.slf4j.Slf4j;
 

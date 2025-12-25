@@ -1,8 +1,6 @@
 package com.aiqa.project1.worker;
 
 import com.aiqa.project1.nodes.State;
-import com.aiqa.project1.util.RedisPoolManager;
-import com.aiqa.project1.utils.MilvusFilterRetriever;
 import com.aiqa.project1.utils.RedisStoreUtils;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;

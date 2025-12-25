@@ -1,7 +1,6 @@
 package com.aiqa.project1.utils;
 
 import com.aiqa.project1.pojo.document.DocumentMetadata;
-import com.aiqa.project1.util.AsyncTaskExecutor;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;

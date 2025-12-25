@@ -2,8 +2,7 @@ package com.aiqa.project1.worker;
 
 import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.nodes.*;
-import com.aiqa.project1.util.*;
-import com.aiqa.project1.utils.RedisStoreUtils;
+import com.aiqa.project1.utils.*;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
