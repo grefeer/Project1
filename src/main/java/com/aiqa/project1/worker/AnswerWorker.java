@@ -32,6 +32,11 @@ public class AnswerWorker {
                 %s
                 </历史对话>
                 
+                接下来，查看回答当前问题的检索信息：
+                <检索信息>
+                %s
+                </检索信息>
+                
                 当前用户问题：
                 <用户查询>
                 %s
@@ -39,41 +44,42 @@ public class AnswerWorker {
                 
                 回答规则：
                 1. 结合历史上下文逻辑，确保回答与之前交互连贯一致，回答简洁明了，保证信息完整准确
-                2. 回答内容需基于检索信息以及历史信息，禁止编造未提及内容，若无直接相关信息，明确告知无法回答
+                2. 回答内容需基于检索信息，禁止编造未提及内容，若无直接相关检索信息，明确告知无法回答
                 3. 问题和回答的语言要一致，这是十分重要的
                 4. 如果用户要求“介绍论文”，回答必须包含论文的核心问题、提出的方法、关键创新点和主要实验结果
                 现在，请开始回答。
                 """;
     private final RabbitTemplate rabbitTemplate;
     private final RedisStoreUtils redisStoreUtils;
-    private final CacheAsideUtils cacheAsideUtils;
 
-    public AnswerWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils, CacheAsideUtils cacheAsideUtils) {
+    public AnswerWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
         this.rabbitTemplate = rabbitTemplate;
         this.redisStoreUtils = redisStoreUtils;
-        this.cacheAsideUtils = cacheAsideUtils;
     }
 
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(value = "answerWorker.queue",durable = "true"),
-            exchange = @Exchange(name = SystemConfig.REFLECTION_DIRECT, type = ExchangeTypes.DIRECT),
-            key = SystemConfig.NO_PROBLEM_KEY
+            exchange = @Exchange(name = "answer.topic", type = ExchangeTypes.TOPIC),
+            key = "have.gathered.retrieve"
     ))
     public void run(State state) {
-        String chatHistory = String.join("\n", cacheAsideUtils.getChatMemory(state.getUserId(), state.getSessionId()));
+        String chatHistory = redisStoreUtils.getChatMemory(state.getUserId(), state.getSessionId(), 10).stream().map(Object::toString).collect(Collectors.joining("\n"));
 
-        System.out.println("AnswerWorker:" + state);
+        String retrievalInfoText = redisStoreUtils.getRetrievalInfo(state.getUserId(), state.getSessionId(),state.getMemoryId(), "retrieve")
+                .stream()
+                .map(Object::toString)
+                .distinct()
+                .collect(Collectors.joining("\n"));
 
-        String prompt = ANSWER_TEMPLATE.formatted(
-                chatHistory,
-                state.getQuery());
+        String query = state.getQuery();
 
+        String prompt = ANSWER_TEMPLATE.formatted(chatHistory, retrievalInfoText, query);
         String answer = douBaoLite.chat(prompt);
         Long idx = redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI思考>" + answer);
         // 延迟，等到redis保存及以后再向rabbitmq发送数据
         if (idx != null && idx > 0) {
-            rabbitTemplate.convertAndSend("result", state);
+            rabbitTemplate.convertAndSend("reflection", state);
         }
     }
 }
