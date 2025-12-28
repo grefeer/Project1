@@ -34,7 +34,8 @@ public class SystemConfig {
     public static final int MAX_RETRIEVAL_COUNT = 5;
     public static final int MAX_REFLECTION_COUNT = 3;
     public static final int MAX_QUERY_LENGTH = 100;
-    
+    public static final int CONSTANT_DIRECT_ANSWER_MODE=9527;
+
     // 延迟配置（毫秒）
     public static final long REDIS_SAVE_DELAY = 100;
     public static final long MESSAGE_SEND_DELAY = 50;
@@ -64,7 +65,8 @@ public class SystemConfig {
     
     // Redis键格式
     public static final String REDIS_RETRIEVAL_KEY_FORMAT = "retrieval:userId:%d:sessionId:%d:memoryId:%d";
-    public static final String REDIS_RETRIEVAL_COUNT_KEY_FORMAT = "retrievalCount:userId:%d:sessionId:%d:memoryId:%d";
+    public static final String REDIS_RETRIEVAL_COUNT_KEY_FORMAT = "retrievalCount:userId:%d:sessionId:%d:memoryId:%d:subtask:%s";
+    public static final String REDIS_SUBTASKS_COUNT_KEY_FORMAT = "subtasksCount:userId:%d:sessionId:%d:memoryId:%d";
 
 
     // 消息过期时间
@@ -84,7 +86,7 @@ public class SystemConfig {
     public static final String RETRIEVER_MILVUS_HYBRID = "milvus_hybrid";
     public static final String RETRIEVER_MILVUS_QUERY = "milvus_query";
     public static final String RETRIEVER_WEB_SEARCH = "web_search";
-    public static final String RETRIEVER_DEFAULT = RETRIEVER_MILVUS_FILTER;
+    public static final String RETRIEVER_DEFAULT = RETRIEVER_MILVUS_HYBRID;
 
     // ChatMemory配置
     public static final String CHAT_MEMORY = "chatMemory:userId:%s:sessionId:%s";

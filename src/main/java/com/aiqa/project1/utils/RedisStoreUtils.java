@@ -48,8 +48,8 @@ public class RedisStoreUtils {
      * @param count
      * @return
      */
-    public Boolean putRetrievalCount(Integer userId, Integer sessionId, Integer memoryId, Integer count) {
-        String key = SystemConfig.REDIS_RETRIEVAL_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId);
+    public Boolean putRetrievalCount(Integer userId, Integer sessionId, Integer memoryId, String subTask, Integer count) {
+        String key = SystemConfig.REDIS_RETRIEVAL_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId, subTask);
         return redisPoolManager.executeWithRetry(template -> 
             template.opsForValue().setIfAbsent(key, count, DEFAULT_TTL));
     }
@@ -61,8 +61,8 @@ public class RedisStoreUtils {
      * @param memoryId
      * @return
      */
-    public Long decreaseRetrievalCount(Integer userId, Integer sessionId, Integer memoryId) {
-        String key = SystemConfig.REDIS_RETRIEVAL_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId);
+    public Long decreaseRetrievalCount(Integer userId, Integer sessionId, Integer memoryId, String subTask) {
+        String key = SystemConfig.REDIS_RETRIEVAL_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId, subTask);
         return redisPoolManager.executeWithRetry(template -> {
             Long var = template.opsForValue().increment(key, -1);
             if (var != null && var.intValue() <= 0) {
@@ -79,11 +79,59 @@ public class RedisStoreUtils {
      * @param memoryId
      * @return
      */
-    public Integer getRetrievalCount(Integer userId, Integer sessionId, Integer memoryId) {
-        String key = SystemConfig.REDIS_RETRIEVAL_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId);
+    public Integer getRetrievalCount(Integer userId, Integer sessionId, Integer memoryId, String subTask) {
+        String key = SystemConfig.REDIS_RETRIEVAL_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId, subTask);
+        return redisPoolManager.executeWithRetry(template ->
+                (Integer) template.opsForValue().get(key));
+    }
+
+
+    /**
+     * 获取未执行子查询的检索器个数（带重试机制）
+     * @param userId
+     * @param sessionId
+     * @param memoryId
+     * @return
+     */
+    public Integer getSubtaskCount(Integer userId, Integer sessionId, Integer memoryId) {
+        String key = SystemConfig.REDIS_SUBTASKS_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId);
         return redisPoolManager.executeWithRetry(template -> 
             (Integer) template.opsForValue().get(key));
     }
+
+    /**
+     * 设置需要检索的子查询数量（带重试机制）
+     * @param userId
+     * @param sessionId
+     * @param memoryId
+     * @param count
+     * @return
+     */
+    public Boolean putSubtaskCount(Integer userId, Integer sessionId, Integer memoryId, Integer count) {
+        String key = SystemConfig.REDIS_SUBTASKS_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId);
+        return redisPoolManager.executeWithRetry(template -> {
+            template.opsForValue().set(key, count, DEFAULT_TTL);
+            return true;
+        });
+    }
+
+    /**
+     * 未执行检索行为的子查询个数减一，标明又有一个子查询完成查询（带重试机制）
+     * @param userId
+     * @param sessionId
+     * @param memoryId
+     * @return
+     */
+    public Long decreaseSubtaskCount(Integer userId, Integer sessionId, Integer memoryId) {
+        String key = SystemConfig.REDIS_SUBTASKS_COUNT_KEY_FORMAT.formatted(userId, sessionId, memoryId);
+        return redisPoolManager.executeWithRetry(template -> {
+            Long var = template.opsForValue().increment(key, -1);
+            template.expire(key, DEFAULT_TTL);
+            return var;
+        });
+    }
+
+
 
     /**
      * 存入检索信息（带重试机制）
@@ -445,5 +493,28 @@ public class RedisStoreUtils {
         });
         return keys;
     }
+    //    public Set<String> getAllKeysByScan(String pattern) {
+//        Set<String> keys = new HashSet<>();
+//        AtomicReference<Cursor<String>> cursor = new AtomicReference<>();
+//        try {
+//            redisPoolManager.executeWithRetry(template -> {
+//                ScanOptions scanOptions = ScanOptions.scanOptions()
+//                        .match(pattern)
+//                        .count(100)
+//                        .build();
+//                cursor.set(template.scan(scanOptions));
+//                while (cursor.get().hasNext()) {
+//                    keys.add(cursor.get().next());
+//                }
+//                cursor.get().close();
+//                return null;
+//            });
+//            return keys;
+//        } finally {
+//            if (cursor.get() != null) {
+//                cursor.get().close();
+//            }
+//        }
+//    }
 
 }

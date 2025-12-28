@@ -103,7 +103,9 @@ public abstract class AbstractRetrieveWorker {
                     userId,
                     sessionId,
                     state.getMemoryId(),
-                    retrievalInformation);
+                    retrievalInformation,
+                    routingKey.split("\\.")[0]
+                    );
             
             // 发送消息到下一个节点
             sendToNextNode(state, routingKey);
@@ -148,7 +150,7 @@ public abstract class AbstractRetrieveWorker {
      * @param memoryId 内存ID
      * @param retrievalInformation 检索结果
      */
-    protected void saveRetrievalResults(Integer userId, Integer sessionId, Integer memoryId, List<Content> retrievalInformation) {
+    protected void saveRetrievalResults(Integer userId, Integer sessionId, Integer memoryId, List<Content> retrievalInformation, String routingKey) {
         try {
             // 将Content转换为可序列化的Map
             List<Map<String, Object>> serializableResults = retrievalInformation.stream()
@@ -157,6 +159,7 @@ public abstract class AbstractRetrieveWorker {
                         map.put("text", content.textSegment().text());
                         map.put("metadata", content.metadata());
                         map.put("检索段落来自于：", content.textSegment().metadata().getString("come_from"));
+                        map.put("使用的检索器名称", routingKey);
                         return map;
                     })
                     .toList();
@@ -204,12 +207,5 @@ public abstract class AbstractRetrieveWorker {
         // 可以在这里添加重试逻辑或死信队列处理
         throw new RuntimeException("消息发送失败", e);
     }
-
-    /**
-     * 解析搜索结果为Content对象列表
-     * @param searchResults 搜索结果
-     * @return Content对象列表
-     */
-    protected abstract List<Content> parseSearchResults(Object searchResults);
 
 }

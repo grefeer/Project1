@@ -38,8 +38,7 @@ public class MilvusQueryRetriever {
                 List<String> filteredWordsList = new ArrayList<>();
                 ((List<?>) filteredWords).forEach(word -> filteredWordsList.add(word.toString()));
                 queryResp= milvusSearchUtils.filterByComeFromIn(userId, sessionId, filteredWordsList, List.of("come_from", "text", "title", "author"));
-            }
-            else {
+            } else {
                 throw new RuntimeException("MilvusContentRetriever requires filtered words");
             }
             return MilvusSearchUtils.getContentsFromQueryResp(queryResp);

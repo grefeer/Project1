@@ -13,6 +13,7 @@ import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -22,26 +23,28 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
  * 调用Tavily API实现
  */
 @Component
+@Slf4j
 public class WebSearchWorker extends AbstractRetrieveWorker {
     private final ContentRetriever webSearchContentRetriever;
 
     public WebSearchWorker(
-        OpenAiChatModel douBaoLite,
-        ContentRetriever webSearchContentRetriever,
-        RabbitTemplate rabbitTemplate,
-        RedisStoreUtils redisStoreUtils,
-        RedisTemplate<String, Object> redisTemplate,
-        ObjectMapper objectMapper,
-        MilvusSearchUtils milvusSearchUtils,
-        AsyncTaskExecutor asyncTaskExecutor,
-        RateLimiter rateLimiter,
-        TimeoutControl timeoutControl
+            OpenAiChatModel douBaoLite,
+            ContentRetriever webSearchContentRetriever,
+            RabbitTemplate rabbitTemplate,
+            RedisStoreUtils redisStoreUtils,
+            RedisTemplate<String, Object> redisTemplate,
+            ObjectMapper objectMapper,
+            MilvusSearchUtils milvusSearchUtils,
+            AsyncTaskExecutor asyncTaskExecutor,
+            RateLimiter rateLimiter,
+            TimeoutControl timeoutControl, RateLimiter rateLimiter1
     ) {
         super(
             rabbitTemplate,
@@ -67,7 +70,12 @@ public class WebSearchWorker extends AbstractRetrieveWorker {
 
     @Override
     protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
-        return webSearchContentRetriever.retrieve(query);
+        try {
+            return webSearchContentRetriever.retrieve(query);
+        } catch (Exception e) {
+            log.error("用户[{}]会话[{}]网页检索失败，query:{}", userId, sessionId, query, e);
+            return Collections.emptyList();
+        }
     }
 
     @Override
@@ -75,8 +83,4 @@ public class WebSearchWorker extends AbstractRetrieveWorker {
         return "";
     }
 
-    @Override
-    protected List<Content> parseSearchResults(Object searchResults) {
-        return null;
-    }
 }

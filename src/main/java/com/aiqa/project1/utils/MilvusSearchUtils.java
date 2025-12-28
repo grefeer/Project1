@@ -381,6 +381,47 @@ public class MilvusSearchUtils {
         return milvusClient.search(searchReq);
     }
 
+    /**
+     * 向量搜索+过滤：结合向量相似度搜索与 come_from 过滤
+     * @param query 用户提问
+     * @param topK 返回的TopK结果
+     * @param userId 用户ID
+     * @param filteredWords 过滤的 come_from 值
+     * @return 搜索结果
+     */
+    public SearchResp filterSearchWithFiles(
+            String query,
+            String filteredWords,
+            Integer userId,
+            Integer sessionId,
+            int topK
+    ) {
+        float[] queryDense = onnxMiniLML12V2EmbeddingModel.embed(query).content().vector();
+
+        List<BaseVector> queryVector = Collections.singletonList(new FloatVec(queryDense));
+        HashMap<String, Object> searchParamsMap = new HashMap<>();
+        searchParamsMap.put("hints", "iterative_filter");
+        searchParamsMap.put("ef", "50");
+        searchParamsMap.put("anns_field", "text_dense");
+
+        List<String> filterConditions = new ArrayList<>();
+        String filterExpr = String.format("come_from in [%s]", filteredWords);
+        filterConditions.add(filterExpr);
+        if (sessionId != -1) {
+            filterConditions.add(String.format("session_id == %d", sessionId));
+        }
+
+        SearchReq searchReq = SearchReq.builder()
+                .collectionName(collectionName + "_" +userId.toString())
+                .data(queryVector)
+                .topK(topK)
+                .filter(String.join(" AND ", filterConditions)) // 详见https://milvus.io/docs/zh/boolean.md
+                .outputFields(Arrays.asList("text", "come_from", "title", "author"))
+                .searchParams(searchParamsMap)
+                .build();
+        return milvusClient.search(searchReq);
+    }
+
     public Boolean deleteDocumentEmbeddingsByName(String documentName, String userId) {
 
         DeleteReq deleteReq = DeleteReq.builder()
