@@ -77,6 +77,7 @@ public class TaskDivideWorker {
             state1.setRetrievalQuery(string);
             state1.setParams("task" + i);
             state1.setMaxSubtasksCount(stringListMap.size());
+            state1.setRetrievalGlobalFlag(state.getRetrievalGlobalFlag());
             rabbitTemplate.convertAndSend("Start", "start", state1);
         }
     }
