@@ -43,8 +43,7 @@ public class RewriteRouteWorker {
     @Autowired
     private AsyncTaskExecutor asyncTaskExecutor;
     
-    @Autowired
-    private RetrieveWorkerFactory retrieveWorkerFactory;
+
 
     private static final String ROUTING_TEMPLATE = """
     你是多智能体系统的路由节点，负责根据历史对话和用户查询选择最合适的数据源。以下是可用的节点信息：
@@ -157,7 +156,10 @@ public class RewriteRouteWorker {
         try {
             // 准备路由选项
             List<String> agentList = prepareAgentOptions();
-            
+
+            // 同步子问题数量
+            redisStoreUtils.putSubtaskCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getMaxSubtasksCount());
+
             // 1. 问题重写
             String chatHistory = redisStoreUtils.getChatMemory(
                 state.getUserId(),
@@ -165,7 +167,9 @@ public class RewriteRouteWorker {
                 SystemConfig.MAX_REWRITE_HISTORY_SIZE).stream()
                 .map(Object::toString)
                 .collect(Collectors.joining("\n"));
-            String rewriteQuery = rewriteUserQuery(chatHistory, state.getQuery());
+            String rewriteQuery = rewriteUserQuery(
+                    chatHistory,
+                    (state.getRetrievalQuery()== null || state.getRetrievalQuery().isEmpty()) ? state.getQuery(): state.getRetrievalQuery());
             
             // 2. 问题质检
             rewriteQuery = QualityInspection(rewriteQuery)
@@ -231,7 +235,7 @@ public class RewriteRouteWorker {
     private void routeToAgents(State state, List<String> agentList, String chatHistory, String rewriteQuery) {
         // 如果不是数据库检索，直接使用网络检索
         if (!state.getRetrievalDBFlag()) {
-            Boolean ifExistence = redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), 1);
+            Boolean ifExistence = redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getParams(), 1);
             
             // 使用异步任务执行器发送消息
             asyncTaskExecutor.submit(() -> {
@@ -276,7 +280,7 @@ public class RewriteRouteWorker {
 
             // 统计使用了几个检索器，方便后续合并检索信息
             state.setMaxRetrievalCount(matchedAgents.size());
-            Boolean ifExistence = redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getMaxRetrievalCount());
+            Boolean ifExistence = redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getParams(), state.getMaxRetrievalCount());
 
             // 使用异步任务执行器批量发送消息
             List<CompletableFuture<Object>> sendFutures = matchedAgents.stream()

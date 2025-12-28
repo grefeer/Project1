@@ -64,7 +64,7 @@ public class StartWorker {
     public void run(State state) {
         Integer sessionId = state.getSessionId();
         QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
-        List<Document> documentList = new ArrayList<>();
+        List<Document> documentList;
 
 //        queryWrapper.like("session_id", sessionId.toString());
         queryWrapper.apply("FIND_IN_SET({0}, session_id) > 0", sessionId);
@@ -93,7 +93,7 @@ public class StartWorker {
             rabbitTemplate.convertAndSend("refection.direct", "new.problem", state);
         } else {
             state.setRetrievalDBFlag(false);
-            redisStoreUtils.putRetrievalCount(state.getUserId(), sessionId , state.getMemoryId(), 1);
+            redisStoreUtils.putRetrievalCount(state.getUserId(), sessionId , state.getMemoryId(), state.getParams(),1);
             rabbitTemplate.convertAndSend("Retrieve", "WebSearch.retrieve", state);
         }
 

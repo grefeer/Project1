@@ -22,14 +22,38 @@ public class State {
     private String query;
     private Integer maxReflection = 3;
     private Integer maxRetrievalCount = 1000;
+    private Integer maxSubtasksCount = 1000;
     private String retrievalQuery;
     private Boolean retrievalDBFlag = true;
     private Boolean retrievalGlobalFlag = false;
+    private String params = "";
 
     public State(Integer userId, Integer sessionId, Integer memoryId, String query) {
         this.userId = userId;
         this.sessionId = sessionId;
         this.memoryId = memoryId;
         this.query = query;
+    }
+
+    public State(Integer userId, Integer sessionId, Integer memoryId, String query, String retrievalQuery) {
+        this.userId = userId;
+        this.sessionId = sessionId;
+        this.memoryId = memoryId;
+        this.query = query;
+        this.retrievalQuery = retrievalQuery;
+    }
+
+    public State(Integer userId, Integer sessionId, Integer memoryId, ChatMemory chatMemory, List<Content> retrievalInfo, String query, Integer maxReflection, Integer maxRetrievalCount, String retrievalQuery, Boolean retrievalDBFlag, Boolean retrievalGlobalFlag) {
+        this.userId = userId;
+        this.sessionId = sessionId;
+        this.memoryId = memoryId;
+        this.chatMemory = chatMemory;
+        this.retrievalInfo = retrievalInfo;
+        this.query = query;
+        this.maxReflection = maxReflection;
+        this.maxRetrievalCount = maxRetrievalCount;
+        this.retrievalQuery = retrievalQuery;
+        this.retrievalDBFlag = retrievalDBFlag;
+        this.retrievalGlobalFlag = retrievalGlobalFlag;
     }
 }

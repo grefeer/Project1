@@ -83,8 +83,4 @@ public class MilvusQueryRetrieveWorker extends AbstractRetrieveWorker {
         return douBaoLite.chat(prompt);
     }
 
-    @Override
-    protected List<Content> parseSearchResults(Object searchResults) {
-        return MilvusSearchUtils.getContentsFromQueryResp((QueryResp) searchResults);
-    }
 }

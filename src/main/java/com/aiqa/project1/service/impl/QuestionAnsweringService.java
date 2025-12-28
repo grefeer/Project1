@@ -212,13 +212,22 @@ public class QuestionAnsweringService {
             queryWrapper.eq("user_id", userId)
                     .select("max(session_id) as session_id");
             SessionChat sessionChat = sessionChatMapper.selectOne(queryWrapper);
+            Integer maxSessionId;
+            List<UserChatMemory> userChatMemories = null;
+            if(sessionChat != null) {
+                maxSessionId = sessionChat.getSessionId();
+                queryWrapper_.eq("user_id", userId)
+                        .eq("session_id", sessionChat.getSessionId());
+                userChatMemories = userChatMemoryMapper.selectList(queryWrapper_);
+            } else {
+                maxSessionId = 1;
+            }
 
-            queryWrapper_.eq("session_id", sessionChat.getSessionId());
-            Integer maxSessionId = (sessionChat != null) ? sessionChat.getSessionId() : 1;
 
-            if(userChatMemoryMapper.selectOne(queryWrapper_) != null)
+
+            if(!(userChatMemories == null || userChatMemories.isEmpty())) {
                 maxSessionId += 1;
-
+            }
             String result = cacheAsideUtils.getSessionChat(userId, maxSessionId);
             if (result != null) {
                 return Result.define(200, "会话已存在", Map.of("sessionName", result, "sessionId", maxSessionId));

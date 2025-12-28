@@ -31,7 +31,7 @@ public class StateProducer {
         redisStoreUtils.setOrIncreaseActivateSessionId(userId, sessionId);
 
         if (idx != null && idx > 0) {
-            rabbitTemplate.convertAndSend("Start", "start", state);
+            rabbitTemplate.convertAndSend("intent.router.direct", "start", state);
         }
     }
 }

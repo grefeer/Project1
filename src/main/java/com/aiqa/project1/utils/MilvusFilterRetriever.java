@@ -23,7 +23,7 @@ public class MilvusFilterRetriever {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, sessionId, topK);
+        SearchResp searchResp = milvusSearchUtils.filterSearchWithFiles(query.text(), filteredWords, userId, sessionId, topK);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
@@ -31,7 +31,7 @@ public class MilvusFilterRetriever {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.filterSearch(query.text(), filteredWords, userId, sessionId, 10);
+        SearchResp searchResp = milvusSearchUtils.filterSearchWithFiles(query.text(), filteredWords, userId, sessionId, 10);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 

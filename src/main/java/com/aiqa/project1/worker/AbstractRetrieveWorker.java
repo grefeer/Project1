@@ -205,11 +205,4 @@ public abstract class AbstractRetrieveWorker {
         throw new RuntimeException("消息发送失败", e);
     }
 
-    /**
-     * 解析搜索结果为Content对象列表
-     * @param searchResults 搜索结果
-     * @return Content对象列表
-     */
-    protected abstract List<Content> parseSearchResults(Object searchResults);
-
 }

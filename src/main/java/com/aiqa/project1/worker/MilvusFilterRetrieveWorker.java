@@ -24,20 +24,28 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
 public class MilvusFilterRetrieveWorker extends AbstractRetrieveWorker {
     
     private final MilvusFilterRetriever milvusFilterRetriever;
-
     private static final String KEYWORD_EXTRACTION_TEMPLATE = """
             给定以下查询，你的任务是提取出该问题所在的文档名称。
-            用户查询：%s
-            至关重要的是，只需要输出文章名称，不需要输出其他字符，其他内容一概不要！不要在关键词前后添加任何内容！
-            例如：
+            <用户查询>
+            %s
+            </用户查询>
+            至关重要的是，只需要输出文章名称，多个文章要使用英文逗号分开，除此之外不需要输出其他字符，其他内容一概不要！不要在关键词前后添加任何内容！
+            <案例一>
             2106.09685v2.pdf
+            </案例一>
+            <案例二>
+            2106.09685v2.pdf,2142.07865v2.pdf,2406.07788v3.pdf
+            </案例二>
+            现在，请输出你的答案：
             """;
 
     public MilvusFilterRetrieveWorker(
@@ -77,7 +85,8 @@ public class MilvusFilterRetrieveWorker extends AbstractRetrieveWorker {
     @Override
     protected String extractKeywords(String query) {
         String prompt = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
-        return douBaoLite.chat(prompt);
+        // 匹配"",""
+        return "\"" + String.join("\",\"", douBaoLite.chat(prompt).split(",")) + "\"";
     }
 
     @Override
@@ -85,13 +94,4 @@ public class MilvusFilterRetrieveWorker extends AbstractRetrieveWorker {
         return milvusFilterRetriever.retrieve(userId, sessionId, keywords, 5, query);
     }
 
-    @Override
-    protected List<Content> parseSearchResults(Object searchResults) {
-        try {
-            return MilvusSearchUtils.getContentsFromSearchResp((SearchResp) searchResults);
-        } catch (Exception e) {
-            log.error("解析Milvus搜索结果失败", e);
-            return List.of();
-        }
-    }
 }

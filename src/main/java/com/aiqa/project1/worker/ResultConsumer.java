@@ -27,11 +27,7 @@ public class ResultConsumer {
         this.userChatMemoryMapper = userChatMemoryMapper;
     }
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = "result", durable = "true"),
-            exchange = @Exchange(name = "refection.direct", type = ExchangeTypes.DIRECT),
-            key = "no.problem"
-    ))
+    @RabbitListener(queuesToDeclare = @Queue(value = "result", durable = "true"))
     public void receive(State state) {
         System.out.println(state);
 
