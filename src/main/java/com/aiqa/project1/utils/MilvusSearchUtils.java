@@ -259,7 +259,7 @@ public class MilvusSearchUtils {
         // 构建过滤表达式：字符串需用双引号包裹
         String filterExpr = String.format("come_from == \"%s\"", targetValue);
         filterConditions.add(filterExpr);
-        if (sessionId != -1) {
+        if (sessionId != 0) {
             filterConditions.add(String.format("session_id == %d", sessionId));
         }
 
@@ -296,7 +296,7 @@ public class MilvusSearchUtils {
         List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from in [%s]", valuesStr);
         filterConditions.add(filterExpr);
-        if (sessionId != -1) {
+        if (sessionId != 0) {
             filterConditions.add(String.format("session_id == %d", sessionId));
         }
         System.out.println("filterExpr:" + filterExpr);
@@ -326,7 +326,7 @@ public class MilvusSearchUtils {
         List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from == \"%s\"", excludeValue);
         filterConditions.add(filterExpr);
-        if (sessionId != -1) {
+        if (sessionId != 0) {
             filterConditions.add(String.format("session_id == %d", sessionId));
         }
 
@@ -366,7 +366,7 @@ public class MilvusSearchUtils {
         List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from == \"%s\"", filteredWords);
         filterConditions.add(filterExpr);
-        if (sessionId != -1) {
+        if (sessionId != 0) {
             filterConditions.add(String.format("session_id == %d", sessionId));
         }
 
@@ -407,7 +407,7 @@ public class MilvusSearchUtils {
         List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from in [%s]", filteredWords);
         filterConditions.add(filterExpr);
-        if (sessionId != -1) {
+        if (sessionId != 0) {
             filterConditions.add(String.format("session_id == %d", sessionId));
         }
 

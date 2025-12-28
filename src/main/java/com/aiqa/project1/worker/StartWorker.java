@@ -72,7 +72,7 @@ public class StartWorker {
         documentList = documentMapper.selectList(queryWrapper);
 
         // 当前会话没有传递文件，用数据库进行回答
-        if (documentList.isEmpty()) {
+        if (documentList == null || documentList.isEmpty()) {
             QueryWrapper<Document> allQueryWrapper = new QueryWrapper<>();
             allQueryWrapper.eq("user_id", state.getUserId());
             documentList = documentMapper.selectList(allQueryWrapper);
