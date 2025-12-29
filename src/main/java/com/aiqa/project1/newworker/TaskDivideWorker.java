@@ -2,6 +2,7 @@ package com.aiqa.project1.newworker;
 
 import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.nodes.State;
+import com.aiqa.project1.utils.AsyncTaskExecutor;
 import com.aiqa.project1.utils.CacheAsideUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -17,6 +18,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Component
 public class TaskDivideWorker {
@@ -44,13 +49,11 @@ public class TaskDivideWorker {
             现在开始拆分。
             """;
     private final RabbitTemplate rabbitTemplate;
-    private final CacheAsideUtils cacheAsideUtils;
     private final RedisStoreUtils redisStoreUtils;
 
     public TaskDivideWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, CacheAsideUtils cacheAsideUtils, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
         this.rabbitTemplate = rabbitTemplate;
-        this.cacheAsideUtils = cacheAsideUtils;
         this.redisStoreUtils = redisStoreUtils;
     }
 
