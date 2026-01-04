@@ -24,9 +24,11 @@ public class State {
     private Integer maxRetrievalCount = 1000;
     private Integer maxSubtasksCount = 1000;
     private String retrievalQuery;
-    private Boolean retrievalDBFlag = true;
+    private Boolean retrievalWebFlag = false;
     private Boolean retrievalGlobalFlag = false;
     private String params = "";
+    private Boolean localRetrievalFlag = true;
+    private List<String> retrievalDocuments = new ArrayList<>();
 
     public State(Integer userId, Integer sessionId, Integer memoryId, String query) {
         this.userId = userId;
@@ -43,7 +45,7 @@ public class State {
         this.retrievalQuery = retrievalQuery;
     }
 
-    public State(Integer userId, Integer sessionId, Integer memoryId, ChatMemory chatMemory, List<Content> retrievalInfo, String query, Integer maxReflection, Integer maxRetrievalCount, String retrievalQuery, Boolean retrievalDBFlag, Boolean retrievalGlobalFlag) {
+    public State(Integer userId, Integer sessionId, Integer memoryId, ChatMemory chatMemory, List<Content> retrievalInfo, String query, Integer maxReflection, Integer maxRetrievalCount, String retrievalQuery, Boolean retrievalWebFlag, Boolean retrievalGlobalFlag) {
         this.userId = userId;
         this.sessionId = sessionId;
         this.memoryId = memoryId;
@@ -53,7 +55,7 @@ public class State {
         this.maxReflection = maxReflection;
         this.maxRetrievalCount = maxRetrievalCount;
         this.retrievalQuery = retrievalQuery;
-        this.retrievalDBFlag = retrievalDBFlag;
+        this.retrievalWebFlag = retrievalWebFlag;
         this.retrievalGlobalFlag = retrievalGlobalFlag;
     }
 }

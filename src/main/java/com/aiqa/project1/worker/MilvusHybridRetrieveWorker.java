@@ -74,7 +74,7 @@ public class MilvusHybridRetrieveWorker extends AbstractRetrieveWorker  {
 
     @Override
     protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
-        return milvusHybridRetriever.retrieveTopK5WithRRF(userId, sessionId, keywords, query);
+        return milvusHybridRetriever.retrieveTopK10WithRRF(userId, sessionId, keywords, query);
     }
 
     @Override

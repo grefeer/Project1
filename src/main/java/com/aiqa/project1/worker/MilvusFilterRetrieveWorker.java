@@ -91,7 +91,7 @@ public class MilvusFilterRetrieveWorker extends AbstractRetrieveWorker {
 
     @Override
     protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
-        return milvusFilterRetriever.retrieve(userId, sessionId, keywords, 5, query);
+        return milvusFilterRetriever.retrieve(userId, sessionId, keywords, 10, query);
     }
 
 }

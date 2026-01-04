@@ -16,7 +16,7 @@ public class StateProducer {
         this.rabbitTemplate = rabbitTemplate;
         this.redisStoreUtils = redisStoreUtils;
     }
-    // TODO 还是有数据库数据是英文，Query是中文，检索准确率低，迭代次数多 的问题
+
     public void run(Integer userId, Integer sessionId, Integer memoryId, String query) {
         State state = new State(
                 userId,
