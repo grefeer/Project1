@@ -5,6 +5,7 @@ import com.aiqa.project1.nodes.*;
 import com.aiqa.project1.utils.*;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -28,21 +30,17 @@ import java.util.stream.Collectors;
 public class RewriteRouteWorker {
     private final OpenAiChatModel douBaoLite;
     private final RabbitTemplate rabbitTemplate;
-    private static final FallbackStrategy fallbackStrategy = FallbackStrategy.ROUTE_TO_ALL;
-    private final Map<String, String> agentsToDescription;
-    
+    private static final FallbackStrategy fallbackStrategy = FallbackStrategy.DO_NOT_ROUTE;
+    private Map<String, String> agentsToDescription;
+
     @Autowired
     private RateLimiter rateLimiter;
-    
+
     @Autowired
     private TimeoutControl timeoutControl;
-    
-    @Autowired
-    private CacheManager cacheManager;
-    
     @Autowired
     private AsyncTaskExecutor asyncTaskExecutor;
-    
+
 
 
     private static final String ROUTING_TEMPLATE = """
@@ -50,23 +48,23 @@ public class RewriteRouteWorker {
     <节点信息>
     %s
     </节点信息>
-    
+
     请先查看历史对话：
     <历史对话>
     %s
     </历史对话>
-    
+
     当前用户查询：
     <用户查询>
     %s
     </用户查询>
-    
+
     你的任务是从上述节点中选择检索相关信息的最合适数据源(只有问题十分复杂时才能多选)。请遵循以下规则：
     1. 若历史对话中已使用数据库检索节点但未找到结果，优先选择网络检索节点。
     2. 仅返回节点对应的数字编号，多个编号用逗号分隔，不得包含其他内容。
     现在，请输出你的选择。
     """;
-    
+
     private final String QUALITY_INSPECTION_TEMPLATE = """
     你的任务是快速检验"查询重写节点任务"生成的双语查询内容是否符合要求。内容准确性为核心检验标准，格式问题暂不考虑。
     首先，请仔细阅读原查询重写任务的全部内容：
@@ -101,19 +99,22 @@ public class RewriteRouteWorker {
     [按规则输出的内容]
     </检验结果>
     """;
-    
+
     private static final String QUERY_REWRITING_TEMPLATE = """
     你的任务是根据提供的历史对话和最新用户查询，生成一个简洁的中英文双语查询。该查询的答案需要包含现有对话中回答的不足之处。
     首先，请仔细阅读以下历史对话：
     <历史对话>
     %s
     </历史对话>
-
-    接下来，请查看最新的用户查询：
-    <最新查询>
+    
+    接下来，请查看上一次反思的查询以及目标查询：
+    <上一次反思的查询>
     %s
-    </最新查询>
-
+    </上一次反思的查询>
+    <目标查询>
+    %s
+    </目标查询>
+    
     请按照以下要求生成双语查询:
     1. 中文查询和英文查询需一一对应，表达相同的核心需求
     2. 双语查询需简洁明了，避免冗余信息
@@ -130,6 +131,8 @@ public class RewriteRouteWorker {
     """;
 
     private final RedisStoreUtils redisStoreUtils;
+    @Autowired
+    private CacheAsideUtils cacheAsideUtils;
 
     public RewriteRouteWorker(OpenAiChatModel douBaoLite, RabbitTemplate rabbitTemplate, RedisStoreUtils redisStoreUtils) {
         this.douBaoLite = douBaoLite;
@@ -152,36 +155,32 @@ public class RewriteRouteWorker {
         if (!rateLimiter.tryAcquire()) {
             throw new RuntimeException("系统繁忙，请稍后再试");
         }
-        
+
         try {
             // 准备路由选项
             List<String> agentList = prepareAgentOptions();
 
-//            // 同步子问题数量
-//            redisStoreUtils.putSubtaskCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getMaxSubtasksCount());
-
             // 1. 问题重写
-            String chatHistory = redisStoreUtils.getChatMemory(
-                state.getUserId(),
-                state.getSessionId(),
-                SystemConfig.MAX_REWRITE_HISTORY_SIZE).stream()
-                .map(Object::toString)
-                .collect(Collectors.joining("\n"));
+            String chatHistory = String.join("\n", cacheAsideUtils.getChatMemory(state.getUserId(), state.getSessionId()));
+
+
             String rewriteQuery = rewriteUserQuery(
                     chatHistory,
-                    (state.getRetrievalQuery()== null || state.getRetrievalQuery().isEmpty()) ? state.getQuery(): state.getRetrievalQuery());
-            
-            // 2. 问题质检
-            rewriteQuery = QualityInspection(rewriteQuery)
-            .replace("<双语查询>", "")
-            .replace("<检验结果>", "")
-            .replace("</检验结果>", "")
-            .replace("</双语查询>", "");
+                    (state.getRetrievalQuery() == null || state.getRetrievalQuery().isEmpty()) ? "": state.getRetrievalQuery(),
+                    state.getQuery()
+            );
+
+//            // 2. 问题质检
+//            rewriteQuery = QualityInspection(rewriteQuery)
+//                    .replace("<双语查询>", "")
+//                    .replace("<检验结果>", "")
+//                    .replace("</检验结果>", "")
+//                    .replace("</双语查询>", "");
             state.setRetrievalQuery(rewriteQuery);
-            
+
             // 3. 路由，决定使用哪一个智能体
             routeToAgents(state, agentList, chatHistory, rewriteQuery);
-            
+
         } catch (Exception e) {
             log.error("StateGraph处理异常: {}", e.getMessage());
             throw new RuntimeException(e);
@@ -190,7 +189,7 @@ public class RewriteRouteWorker {
             rateLimiter.release();
         }
     }
-    
+
     /**
      * 准备路由选项
      * @return 可用的智能体列表
@@ -203,18 +202,18 @@ public class RewriteRouteWorker {
         log.debug("准备路由选项，共{}个智能体", agentList.size());
         return agentList;
     }
-    
+
     /**
      * 问题重写功能
      * @param chatHistory 历史对话
      * @param originalQuery 原始查询
      * @return 重写后的查询
      */
-    private String rewriteUserQuery(String chatHistory, String originalQuery) {
-        String rewritePrompt = QUERY_REWRITING_TEMPLATE.formatted(chatHistory, originalQuery);
+    private String rewriteUserQuery(String chatHistory, String subQuery, String originalQuery) {
+        String rewritePrompt = QUERY_REWRITING_TEMPLATE.formatted(chatHistory, subQuery, originalQuery);
         return timeoutControl.chatWithTimeout(douBaoLite, rewritePrompt);
     }
-    
+
     /**
      * 质量检查功能
      * @param query 待检查的查询
@@ -224,7 +223,7 @@ public class RewriteRouteWorker {
         String qualityPrompt = QUALITY_INSPECTION_TEMPLATE.formatted(query);
         return timeoutControl.chatWithTimeout(douBaoLite, qualityPrompt);
     }
-    
+
     /**
      * 路由功能，决定使用哪个智能体，使用异步处理提高性能
      * @param state 状态对象
@@ -234,17 +233,17 @@ public class RewriteRouteWorker {
      */
     private void routeToAgents(State state, List<String> agentList, String chatHistory, String rewriteQuery) {
         // 如果不是数据库检索，直接使用网络检索
-        if (!state.getRetrievalDBFlag()) {
-            Boolean ifExistence = redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getParams(), 1);
-            
-            // 使用异步任务执行器发送消息
-            asyncTaskExecutor.submit(() -> {
-                rabbitTemplate.convertAndSend(SystemConfig.RETRIEVE_EXCHANGE, "WebSearch.retrieve", state);
-                return null;
-            });
-            return;
-        }
-        
+//        if (state.getRetrievalWebFlag()) {
+//            Boolean ifExistence = redisStoreUtils.putRetrievalCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), state.getParams(), 1);
+//
+//            // 使用异步任务执行器发送消息
+//            asyncTaskExecutor.submit(() -> {
+//                rabbitTemplate.convertAndSend(SystemConfig.RETRIEVE_EXCHANGE, "WebSearch.retrieve", state);
+//                return null;
+//            });
+//            return;
+//        }
+
         // 构建路由提示
         StringBuilder optionsBuilder = new StringBuilder();
         int id = 1;
@@ -257,20 +256,24 @@ public class RewriteRouteWorker {
             optionsBuilder.append(entry.getKey());
             id++;
         }
-        String prompt1 = ROUTING_TEMPLATE.formatted(
-                optionsBuilder.toString(),
-                chatHistory,
-                rewriteQuery
-        );
-        
-        // 使用异步任务执行器处理路由决策
-        CompletableFuture<Collection<String>> routingFuture = asyncTaskExecutor.submit(() ->
-            route(prompt1, agentList)
-        );
-        
+        Collection<String> matchedAgents;
+
         try {
-            // 等待路由决策完成
-            Collection<String> matchedAgents = routingFuture.get(SystemConfig.AI_CHAT_TIMEOUT, TimeUnit.MILLISECONDS);
+            if (state.getMaxReflection() == 3) {
+                matchedAgents = getMatchedAgents(state);
+            } else {
+                String prompt1 = ROUTING_TEMPLATE.formatted(
+                        optionsBuilder.toString(),
+                        chatHistory,
+                        rewriteQuery
+                );
+                // 使用异步任务执行器处理路由决策
+                CompletableFuture<Collection<String>> routingFuture = asyncTaskExecutor.submit(
+                        () -> route(prompt1, agentList)
+                );
+                // 等待路由决策完成
+                matchedAgents = routingFuture.get(SystemConfig.AI_CHAT_TIMEOUT, TimeUnit.MILLISECONDS);
+            }
 
             if (matchedAgents.isEmpty()) {
                 // 直接回答问题
@@ -289,16 +292,42 @@ public class RewriteRouteWorker {
                         rabbitTemplate.convertAndSend(SystemConfig.RETRIEVE_EXCHANGE, s + ".retrieve", state);
                         return null;
                     }))
-                    .collect(Collectors.toList());
-            
+                    .toList();
+
             // 等待所有消息发送完成
             CompletableFuture.allOf(sendFutures.toArray(new CompletableFuture[0]))
-                .get(SystemConfig.RABBITMQ_SEND_TIMEOUT, TimeUnit.MILLISECONDS);
-                
+                    .get(SystemConfig.RABBITMQ_SEND_TIMEOUT, TimeUnit.MILLISECONDS);
+
         } catch (Exception e) {
             log.error("路由处理失败: {}", e.getMessage());
             throw new RuntimeException("路由处理失败", e);
         }
+    }
+
+    @NotNull
+    private static Collection<String> getMatchedAgents(State state) {
+        Collection<String> matchedAgents = new ArrayList<>();
+        // 如果需要网络搜索，则进行网络搜索
+        if (state.getRetrievalWebFlag())
+            matchedAgents.add(WebSearchWorker.class.getSimpleName());
+        // 如果有提及文件名，则进行文件名查询,文件大小较大则进行MilvusFilterRetrieveWorker，文件大小较小则进行MilvusQueryRetrieveWorker，
+        // startWorker中要加入是否需要进行本地数据库检索的评估，评估需要查询则进行混合检索
+
+        if (state.getLocalRetrievalFlag()) {
+            matchedAgents.add(MilvusHybridRetrieveWorker.class.getSimpleName());
+        }
+        Map<String, Long> retrievalDocuments = state.getRetrievalDocuments();
+
+        AtomicReference<Double> documentSize = new AtomicReference<>(0.0);
+        retrievalDocuments.values().forEach(v -> documentSize.updateAndGet(v1 -> v1 + (double) v / 1024 / 1024));
+
+        if (documentSize.get() > 2. || state.getHistoryChatRequirements()) {
+            matchedAgents.add(MilvusFilterRetrieveWorker.class.getSimpleName());
+        } else {
+            // 如果文件大小小于2MB，则全都发给大模型
+            matchedAgents.add(MilvusQueryRetrieveWorker.class.getSimpleName());
+        }
+        return matchedAgents;
     }
 
     public enum FallbackStrategy {

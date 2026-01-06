@@ -6,12 +6,12 @@ import com.aiqa.project1.mapper.UserChatMemoryMapper;
 import com.aiqa.project1.pojo.ResponseCode;
 import com.aiqa.project1.pojo.Result;
 import com.aiqa.project1.pojo.qa.SessionChat;
-import com.aiqa.project1.pojo.qa.SessionChatDTO;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.aiqa.project1.utils.CacheAsideUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
 import com.aiqa.project1.worker.StateProducer;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.jetbrains.annotations.NotNull;
@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 
 @Service
@@ -85,6 +86,7 @@ public class QuestionAnsweringService {
 
             System.out.println(currentChatMemoryCount + ":" + memoryId);
             // 从 Redis 获取当前最新的回答内容
+
             List<String> currentAnswer = redisStoreUtils.getChatMemory(
                     userId,
                     sessionId,
@@ -97,6 +99,10 @@ public class QuestionAnsweringService {
             data.put("answer", currentAnswer);
             data.put("sessionId", sessionId);
             data.put("currentChatMemoryCount", currentChatMemoryCount);
+            data.put("memoryIds",
+                    IntStream.rangeClosed(memoryId + 1, currentChatMemoryCount)
+                            .boxed()
+                            .collect(Collectors.toList()));
             if (currentAnswer == null) {
                 return Result.define(202, "AI 正在思考中...", data);
             } else if (currentAnswer.getLast().contains("<最终回答>")) {
@@ -262,67 +268,47 @@ public class QuestionAnsweringService {
         }
     }
 
-    /**
-     * 从MySQL中读取历史所有会话并返回给前端
-     * @param userId
-     * @return
-     */
-    @NotNull
-    public Result getAllChatMemory(Integer userId) {
+    public Result deleteChatMemory(Integer userId, Integer sessionId, List<Long> memoryIds) {
         try {
-            // 获取user的所有session的chat memory
-            QueryWrapper<UserChatMemory> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("user_id", userId);
-            Map<Integer, SessionChatDTO> tempUserChatMemoryMap = new HashMap<>();
-            List<UserChatMemory> userChatMemoryList = userChatMemoryMapper.selectList(queryWrapper);
-
-            userChatMemoryList.forEach(userChatMemory -> {
-                // 如果对话状态为已过期，从MySQL中加载对话
-                if ( userChatMemory.getStatus() == 1) {
-                    redisStoreUtils.setChatMemory(userId, userChatMemory.getSessionId(), userChatMemory.getContent());
-                    userChatMemory.setStatus(0);
-                    userChatMemoryMapper.updateById(userChatMemory);
-                }
-
-                // 按sessionId分组，不存在则创建SessionChatDTO
-                SessionChatDTO sessionChatDTO = tempUserChatMemoryMap.computeIfAbsent(
-                        userChatMemory.getSessionId(),
-                        k -> {
-                            SessionChatDTO dto = new SessionChatDTO();
-                            dto.setSessionId(userChatMemory.getSessionId());
-                            dto.setSessionName(userChatMemory.getSessionId().toString());
-
-                            return dto;
-                        }
-                );
-                // 单个session内已按memoryId升序，直接添加,无需额外排序
-                sessionChatDTO.getMessages().add(userChatMemory);
-            });
-            // 按sessionId升序排序
-            Map<Integer, SessionChatDTO> sortedUserChatMemoryMap = new LinkedHashMap<>();
-            // 提取所有sessionId并升序排序
-            tempUserChatMemoryMap.keySet().stream()
-                    .sorted(Integer::compareTo) // sessionId升序
-                    .forEach(sessionId -> sortedUserChatMemoryMap.put(sessionId, tempUserChatMemoryMap.get(sessionId)));
-            tempUserChatMemoryMap.forEach((integer, sessionChatDTO) -> sessionChatDTO.setLastActiveTime(sessionChatDTO.getMessages().getLast().getLastActiveTime()));
-            return Result.define(200, "任务已提交", sortedUserChatMemoryMap);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
-        }
-    }
-
-    public Result deleteChatMemory(Integer userId, Integer sessionId, Integer memoryId) {
-        try {
-            if (cacheAsideUtils.deleteChatMemory(userId, sessionId, memoryId)) {
-                return Result.define(200, "删除成功", null);
-            }
-            return Result.define(404, "删除失败，无该memoryId", null);
+            memoryIds.forEach(memoryId -> cacheAsideUtils.deleteChatMemory(userId, sessionId, Math.toIntExact(memoryId)));
+            return Result.define(200, "删除成功", null);
         } catch (Exception e){
             e.printStackTrace();
             return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
         }
     }
 
+//    public Result deleteChatMemory1(Integer userId, Integer sessionId, String queries) {
+//        try {
+//            String[] queryStrings = queries.split("<问答分隔符>");
+//            if (queryStrings.length != 2)
+//                return Result.define(404, "格式错误", null);
+//            String startQuery = queryStrings[0];
+//            String endQuery = queryStrings[1];
+//            LambdaQueryWrapper<UserChatMemory> lambdaWrapper = new LambdaQueryWrapper<>();
+//            lambdaWrapper
+//                    .select(UserChatMemory::getMemoryId)
+//                    .in(UserChatMemory::getContent, startQuery, endQuery);
+//
+//            List<Integer> userChatMemories = userChatMemoryMapper
+//                    .selectList(lambdaWrapper)
+//                    .stream()
+//                    .map(UserChatMemory::getMemoryId)
+//                    .toList();
+//
+//            // 2. 删除这个 ID 区间内的所有记录
+//            LambdaQueryWrapper<UserChatMemory> deleteWrapper = new LambdaQueryWrapper<>();
+//            deleteWrapper.ge(UserChatMemory::getMemoryId, userChatMemories.getFirst()) // 大于等于起始ID
+//                    .le(UserChatMemory::getMemoryId, userChatMemories.getLast()); // 小于等于结束ID
+//
+//            userChatMemoryMapper.delete(deleteWrapper);
+//
+//
+//            return Result.define(200, "删除成功", null);
+//        } catch (Exception e){
+//            e.printStackTrace();
+//            return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
+//        }
+//    }
 
 }

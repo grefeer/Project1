@@ -100,6 +100,7 @@ public class IntentRouterWorker {
         } else if (chat.contains("串行任务") || chat.contains("串行")) {
             state.setMaxSubtasksCount(1);
             state.setParams("task0");
+            state.setRetrievalQuery(state.getQuery());
             redisStoreUtils.putSubtaskCount(state.getUserId(), state.getSessionId(), state.getMemoryId(), 1);
             rabbitTemplate.convertAndSend("Start", "start", state);
 
@@ -111,4 +112,3 @@ public class IntentRouterWorker {
         }
     }
 }
-

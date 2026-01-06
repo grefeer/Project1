@@ -74,11 +74,12 @@ public class MilvusHybridRetrieveWorker extends AbstractRetrieveWorker  {
 
     @Override
     protected List<Content> performRetrieve(Integer userId, Integer sessionId, String keywords, Query query) {
-        return milvusHybridRetriever.retrieveTopK5WithRRF(userId, sessionId, keywords, query);
+        return milvusHybridRetriever.retrieveTopK10WithRRF(userId, sessionId, keywords, query);
     }
 
     @Override
-    protected String extractKeywords(String query) {
+    protected String extractKeywords(State state) {
+        String query = (state.getRetrievalQuery() == null) ? state.getQuery() : state.getRetrievalQuery();
         String prompt = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
         return douBaoLite.chat(prompt);
     }

@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -132,19 +133,19 @@ public class AIAnswerController {
     }
 
     /**
-     * 删除指定session的指定memory
+     * 输入问题，删除问题以及对应的思考和回答
      * @param sessionId
-     * @param memoryId
+     * @param memoryIds
      * @param token
      * @return json格式相应，code：状态码（200成功，其他失败），message：状态信息，data：null
      */
-    @DeleteMapping("/chatMemory/delete/{sessionId}/{memoryId}")
+    @DeleteMapping("/chatMemory/delete/{sessionId}")
     public Result deleteChatMemoryBySessionId(
             @PathVariable Integer sessionId,
-            @PathVariable Integer memoryId,
+            @RequestBody List<Long> memoryIds,
             @RequestHeader("Authorization") String token) {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
-        return questionAnsweringService.deleteChatMemory(userId, sessionId, memoryId);
+        return questionAnsweringService.deleteChatMemory(userId, sessionId, memoryIds);
     }
 
     /**

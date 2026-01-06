@@ -88,6 +88,7 @@ public class StateGraph implements Node{
 
                 // 问题重写
                 state = rewriteNode.run(state);
+
                 String chatHistory = state.getChatMemory().messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
                 String rewrittenQuery= state.getRetrievalQuery();
 

@@ -17,29 +17,23 @@ import java.util.stream.Collectors;
 public class ReflectionWorker {
     private final OpenAiChatModel douBaoLite;
     private final String REFLECTION_TEMPLATE= """
-                你是多智能体系统中的回答质检节点，核心任务是判断历史信息是否能完整回应用户的问题。请严格遵循以下步骤执行质检：
-                
-                首先，明确质检对象：
-                <用户问题>
-                %s
-                </用户问题>
-                
-                <历史信息>
-                %s
-                </历史信息>
-                
-                接下来，依据以下标准完成判断：
-                1. 完整性：历史信息内容是否覆盖了用户问题的所有核心诉求？是否存在关键信息缺失？
-                2. 准确性：若问题涉及事实性内容，历史信息内容是否准确无误？
-                
-                然后，按照以下规则输出结果：
-                - 如果历史信息完全满足上述标准，能够完整回答用户问题，请直接返回“无”
-                - 如果历史信息存在缺陷（如信息缺失、准确性不足等），请清晰指出具体需要改进的地方，要求：
-                a. 明确指出问题类型（如“未回答用户关于XX的疑问”“遗漏了XX关键信息”）
-                b. 具体说明需要补充或修正的内容方向
-                
-                请确保你的判断客观、精准，改进建议具有可操作性。无需额外解释，直接输出结果即可。
-                """;
+            你是多智能体系统的回答质检节点，核心职责为：校验历史信息 / 检索信息的信息量充足度，判断其是否能支撑回答节点完整、准确地解答用户当前问题。
+            <用户问题>
+            %s
+            </用户问题>
+            
+            
+            <历史信息以及查询信息>
+            %s
+            </历史信息以及查询信息>
+            
+            
+            判定标准：
+            信息是否覆盖用户问题的核心要素，无关键维度缺失；
+            信息是否具备有效性，能直接或间接推导问题答案；
+            若信息存在缺口，需明确标注缺口类型与补充方向。
+            输出要求：仅输出<信息充足> 或者 <信息不足 + 缺口说明>两种结论，无需额外扩展。
+            """;
     private final RabbitTemplate rabbitTemplate;
     private final RedisStoreUtils redisStoreUtils;
 
@@ -67,7 +61,7 @@ public class ReflectionWorker {
 //        state.setMaxSubtasksCount(1);
 
         // 1.检查回答是否合格，或者是否达到最大迭代次数
-        if (query1.equals("无") || state.getMaxReflection() <= 0) {
+        if (query1.equals("<信息充足>") || query1.equals("信息充足") || state.getMaxReflection() <= 0) {
             rabbitTemplate.convertAndSend("task.gather.topic", "subtasks", state);
 
 //            rabbitTemplate.convertAndSend("refection.direct", "no.problem", state);
@@ -80,7 +74,7 @@ public class ReflectionWorker {
                 state.getSessionId(),
                 """
                 <系统改进建议>
-                用户可能会有以下方面的需求，请根据此需求和问题重新回答：
+                现有查询缺乏以下方面的信息：
                 <需求>
                 %s
                 </需求>
