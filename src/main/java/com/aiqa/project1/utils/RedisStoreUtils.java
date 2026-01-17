@@ -227,10 +227,10 @@ public class RedisStoreUtils {
 
         return redisPoolManager.executeWithRetry(template -> {
             template.expire(key, DEFAULT_TTL);
-            List<Object> memory = template.opsForList().range(key, memoryId, memoryId);
+            List<Object> memory = template.opsForList().range(key, memoryId - 1, memoryId - 1);
             if (memory == null || memory.isEmpty()) return false;
             try {
-                template.opsForList().set(key, memoryId, deletedContent);
+                template.opsForList().set(key, memoryId - 1, deletedContent);
             } catch (Exception e) {
                 e.printStackTrace();
                 return false;

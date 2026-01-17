@@ -36,14 +36,17 @@ public class SummaryWorker {
             1. 仅保留与用户提问直接相关的内容，删除无关信息
             2. 确保提取的内容完整，不遗漏关键细节
             3. 根据检索信息中的“使用的检索器名称：XXX”来注明检索信息的来源（比如WebSearch，MilvusFilterRetrieve，MilvusHybridRetrieve或MilvusQueryRetrieve等待）
-            4. 保持原文原意，不得篡改或概括（除非原文过于冗长，可适当精简但需保留核心信息）
-            5. 如果有多个相关段落，请分别提取并编号
+            4. 保持原文原意，去除和核心提问无关的内容，其余内容在意思不变的前提下可适当压缩长度
+            5. 分段提取，如果每段检索内容中有文章名称，则在每段最开始标注文章名称，否则不标注。比如:
+            <文章来自文档A.pdf>
+            段落内容
+            </文章来自文档A.pdf>
             6. 如果没有相关内容，请明确说明
             
             如果没有相关内容，请输出“检索信息中没有相关内容”。
             
             现在开始执行任务。
-                """;
+            """;
     private final RabbitTemplate rabbitTemplate;
     private final RedisStoreUtils redisStoreUtils;
     private final CacheAsideUtils cacheAsideUtils;
@@ -70,13 +73,14 @@ public class SummaryWorker {
 
         String prompt = SUMMARY_TEMPLATE.formatted(
                 (retrievalQuery == null || retrievalQuery.isEmpty()) ? state.getQuery() : retrievalQuery,
-                retrievalInfoText);
+                retrievalInfoText
+        );
 
         String answer = douBaoLite.chat(prompt);
         Long idx = redisStoreUtils.setChatMemory(
                 state.getUserId(),
                 state.getSessionId(),
-                "<AI思考>" + "子问题:" + ((retrievalQuery == null || retrievalQuery.isEmpty()) ? state.getQuery() : retrievalQuery) + "子问题回答：" + answer
+                "<AI思考>" + "子问题:" + ((retrievalQuery == null || retrievalQuery.isEmpty()) ? state.getQuery() : retrievalQuery) + "子问题检索到的信息：" + answer
         );
         // 延迟，等到redis保存及以后再向rabbitmq发送数据
         if (idx != null && idx > 0) {

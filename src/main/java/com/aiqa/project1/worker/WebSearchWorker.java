@@ -79,7 +79,7 @@ public class WebSearchWorker extends AbstractRetrieveWorker {
     }
 
     @Override
-    protected String extractKeywords(String query) {
+    protected String extractKeywords(State state) {
         return "";
     }
 

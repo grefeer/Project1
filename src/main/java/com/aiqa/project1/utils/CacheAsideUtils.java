@@ -1,14 +1,14 @@
 package com.aiqa.project1.utils;
 
-import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.mapper.SessionChatMapper;
 import com.aiqa.project1.mapper.UserChatMemoryMapper;
+import com.aiqa.project1.nodes.State;
 import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.ScanOptions;
+
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -21,12 +21,14 @@ public class CacheAsideUtils {
     private final RedisStoreUtils redisStoreUtils;
     private final UserChatMemoryMapper userChatMemoryMapper;
     private final SessionChatMapper sessionChatMapper;
+    private final RabbitTemplate rabbitTemplate;
 
 
-    public CacheAsideUtils(RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, SessionChatMapper sessionChatMapper) {
+    public CacheAsideUtils(RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, SessionChatMapper sessionChatMapper, RabbitTemplate rabbitTemplate) {
         this.redisStoreUtils = redisStoreUtils;
         this.userChatMemoryMapper = userChatMemoryMapper;
         this.sessionChatMapper = sessionChatMapper;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     /**
@@ -107,21 +109,38 @@ public class CacheAsideUtils {
         }
     }
 
+//    /**
+//     * 写ChatMemory（带重试机制）
+//     * @param userId
+//     * @param sessionId
+//     */
+//    public Boolean setChatMemory(Integer userId, Integer sessionId, Integer memoryId, String message) {
+//        try {
+//            userChatMemoryMapper.insertOrUpdate(new UserChatMemory(null, userId, sessionId, memoryId, message, LocalDateTime.now(), 0));
+//            redisStoreUtils.removeChatMemory(userId, sessionId, message);
+//            return true;
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            return false;
+//        }
+//    }
+
     /**
-     * 写ChatMemory（带重试机制）
-     * @param userId
-     * @param sessionId
+     * 异步将redis中的数据同步到mysql中
+     * @param state
+     * @return
      */
-    public Boolean setChatMemory(Integer userId, Integer sessionId, Integer memoryId, String message) {
+    public Boolean setChatMemory(State state) {
         try {
-            userChatMemoryMapper.insertOrUpdate(new UserChatMemory(null, userId, sessionId, memoryId, message, LocalDateTime.now(), 0));
-            redisStoreUtils.removeChatMemory(userId, sessionId, message);
+            // 发送消息到RabbitMQ，异步更新MySQL
+            rabbitTemplate.convertAndSend("mysql.update", "chat.memory", state);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
             return false;
         }
     }
+
 
     /**
      * 读ChatMemory（带重试机制）
@@ -131,7 +150,7 @@ public class CacheAsideUtils {
     public List<String> getChatMemory(Integer userId, Integer sessionId) {
         try {
             List<String> result;
-            result = redisStoreUtils.getChatMemory(userId, sessionId, 10000)
+            result = redisStoreUtils.getChatMemory(userId, sessionId, 10)
                     .stream()
                     .map(Objects::toString)
                     .toList();

@@ -312,6 +312,36 @@ public class MilvusSearchUtils {
     }
 
     /**
+     * 多值匹配过滤：查询 come_from 在指定值列表中的结果(无向量检索)
+     * @param userId 用户ID
+     * @param values 目标值列表
+     * @param outputFields 需要返回的字段列表
+     * @return 查询结果
+     */
+    public QueryResp filterByComeFromIn(Integer userId,
+                                        Integer sessionId,
+                                        String values,
+                                        List<String> outputFields) {
+
+        List<String> filterConditions = new ArrayList<>();
+        String filterExpr = String.format("come_from in [%s]", values);
+        filterConditions.add(filterExpr);
+        if (sessionId != -1) {
+            filterConditions.add(String.format("session_id == %d", sessionId));
+        }
+        System.out.println("filterExpr:" + filterExpr);
+
+        QueryReq queryParam = QueryReq.builder()
+                .collectionName(collectionName + "_" +userId.toString())
+                .filter(String.join(" AND ", filterConditions))
+                .outputFields(outputFields)
+                .build();
+
+        // 此处假设已初始化 MilvusClient 实例（实际使用时需传入）
+        return milvusClient.query(queryParam);
+    }
+
+    /**
      * 排除匹配过滤：查询 come_from 不等于指定值的结果
      * @param userId 用户ID
      * @param excludeValue 需排除的值

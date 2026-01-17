@@ -25,7 +25,7 @@ public class TaskGatherWorker {
 
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(value = "task.gather",durable = "true"),
-            exchange = @Exchange(value = "task.gather.topic", type = ExchangeTypes.TOPIC),
+            exchange = @Exchange(value = "task.gather.topic", type = ExchangeTypes.DIRECT),
             key = "subtasks"
     ))
     public void receiveRetrieveResult(State state) {

@@ -21,26 +21,13 @@ public class MilvusQueryRetriever {
         this.milvusSearchUtils = milvusSearchUtils;
     }
 
-    public List<Content> retrieve(Integer userId,Integer sessionId, Object filteredWords, Boolean equalFlag, Query query) {
+    public List<Content> retrieve(Integer userId,Integer sessionId, String filteredWords, Boolean equalFlag, Query query) {
         if (userId == null || filteredWords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
         QueryResp queryResp;
         try {
-            if (filteredWords instanceof String ) {
-                if (equalFlag) {
-                    queryResp= milvusSearchUtils.filterByComeFromExact(userId, sessionId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
-                } else {
-                    queryResp= milvusSearchUtils.filterByComeFromNotEqual(userId, sessionId, filteredWords.toString(), List.of("come_from", "text", "title", "author"));
-                }
-
-            } else if (filteredWords instanceof List) {
-                List<String> filteredWordsList = new ArrayList<>();
-                ((List<?>) filteredWords).forEach(word -> filteredWordsList.add(word.toString()));
-                queryResp= milvusSearchUtils.filterByComeFromIn(userId, sessionId, filteredWordsList, List.of("come_from", "text", "title", "author"));
-            } else {
-                throw new RuntimeException("MilvusContentRetriever requires filtered words");
-            }
+            queryResp = milvusSearchUtils.filterByComeFromIn(userId, sessionId, filteredWords, List.of("come_from", "text", "title", "author"));
             return MilvusSearchUtils.getContentsFromQueryResp(queryResp);
 
         } catch (Exception e) {

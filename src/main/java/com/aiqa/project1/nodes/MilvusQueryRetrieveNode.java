@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 
 @Component
@@ -43,7 +44,7 @@ public class MilvusQueryRetrieveNode implements Node{
         List<String> threadSafeKeywordsList = Collections.synchronizedList(new ArrayList<>());
         Collections.addAll(threadSafeKeywordsList, keywords.split(","));
 
-        retrievalInfo.addAll(milvusQueryRetriever.retrieve(userId, state.getSessionId(), threadSafeKeywordsList, true, Query.from(query)));
+        retrievalInfo.addAll(milvusQueryRetriever.retrieve(userId, state.getSessionId(), String.join("\n", threadSafeKeywordsList), true, Query.from(query)));
         return state;
 
     }

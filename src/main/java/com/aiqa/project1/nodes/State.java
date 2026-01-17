@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 import org.checkerframework.checker.units.qual.A;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -28,7 +30,8 @@ public class State {
     private Boolean retrievalGlobalFlag = false;
     private String params = "";
     private Boolean localRetrievalFlag = true;
-    private List<String> retrievalDocuments = new ArrayList<>();
+    private Map<String, Long> retrievalDocuments = new HashMap<>();
+    private Boolean historyChatRequirements = false;
 
     public State(Integer userId, Integer sessionId, Integer memoryId, String query) {
         this.userId = userId;

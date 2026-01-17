@@ -78,7 +78,8 @@ public class MilvusHybridRetrieveWorker extends AbstractRetrieveWorker  {
     }
 
     @Override
-    protected String extractKeywords(String query) {
+    protected String extractKeywords(State state) {
+        String query = (state.getRetrievalQuery() == null) ? state.getQuery() : state.getRetrievalQuery();
         String prompt = KEYWORD_EXTRACTION_TEMPLATE.formatted(query);
         return douBaoLite.chat(prompt);
     }

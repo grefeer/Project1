@@ -36,7 +36,10 @@ public class StartWorker {
                 <user_query>
                 %s
                 </user_query>
-                
+                其次，明确数据库里的文件：
+                <Document>
+                %s
+                </Document>
                 
                 需要上网查询的用户问题需要包含以下几个方面的其中一条：
                 1. 时效性强：涉及最新事件（如“2025年奥运会举办城市”）、实时数据（股价、天气）、近期政策变动等，本地知识库未覆盖或已过期。
@@ -49,43 +52,60 @@ public class StartWorker {
                 严格按照以下输出格式输出：
                 {
                     "related_documents": ["第一份文档.pdf", "第二份文档.docx", ..., "第N份文档.md"]
-                    "web_retrieval_flag": False/True
+                    "web_retrieval_flag": false/true,
+                    "additional_local_search_requirements": false/true,
+                    "history_chat_requirements": false/true
                 }
-                其中，"related_documents"包含需要检索的文档，"web_retrieval_flag"代表是否需要使用网络检索，True代表需要检索，False代表不需要检索。
+                其中，"related_documents"包含检索中明确提及的文档，"web_retrieval_flag"代表是否需要使用网络检索，true代表需要检索，false代表不需要检索；
+                "additional_local_search_requirements"代表除了"related_documents"中提及的文件外，是否还需要从本地数据库中检索别的文件的信息，true代表需要别的文件的信息，false代表不需要。
+                "history_chat_requirements"代表用户查询有提及，暗示需要从历史信息中获取文档名称或者有这方面的意图，如果有需要从历史对话中找文件名称的意图，"history_chat_requirements"为true，否则为false，
+                注意，如果"history_chat_requirements"为true，则不需要"additional_local_search_requirements"再为true了
                 <案例>
                 
                 问题：fafafas.pdf文档和sfaff.docs文档分别讲了什么？
                 响应：
                 {
                     "related_documents": ["fafafas.pdf", "sfaff.docs"]
-                    "web_retrieval_flag": False,
-                    "local_retrieval_flag": True
+                    "web_retrieval_flag": false,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": false
                 }
                 
                 问题：fafafas.pdf文档描述的地方现在气温多少度？
                 响应：
                 {
                     "related_documents": ["fafafas.pdf"]
-                    "web_retrieval_flag": True,
-                    "local_retrieval_flag": True
+                    "web_retrieval_flag": true,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": false
                 }
                 
                 问题：沈阳今日气温多少度？
                 响应：
                 {
                     "related_documents": [],
-                    "web_retrieval_flag": True,
-                    "local_retrieval_flag": False
+                    "web_retrieval_flag": true,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": false
                 }
                 
                 问题：请根据本地数据库回答，langchain是什么？
                 响应：
                 {
                     "related_documents": [],
-                    "web_retrieval_flag": False,
-                    "local_retrieval_flag": True
+                    "web_retrieval_flag": false,
+                    "additional_local_search_requirements": true
+                    "history_chat_requirements": true
                 }
                 
+                问题：之前提及的文件中，langchain是什么？
+                响应：
+                {
+                    "related_documents": [],
+                    "web_retrieval_flag": false,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": true
+                }
                 </案例>
                 """;
     private final RabbitTemplate rabbitTemplate;
@@ -108,26 +128,35 @@ public class StartWorker {
         QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
         List<Document> documentList;
 
- //        queryWrapper.like("session_id", sessionId.toString());
+        //        queryWrapper.like("session_id", sessionId.toString());
         queryWrapper.apply("FIND_IN_SET({0}, session_id) > 0", sessionId);
         queryWrapper.eq("user_id", state.getUserId());
         documentList = documentMapper.selectList(queryWrapper);
 
         // 当前会话没有传递文件，用数据库进行回答
         if (documentList == null || documentList.isEmpty()) {
-//            QueryWrapper<Document> allQueryWrapper = new QueryWrapper<>();
-//            allQueryWrapper.eq("user_id", state.getUserId());
-//            documentList = documentMapper.selectList(allQueryWrapper);
+            QueryWrapper<Document> allQueryWrapper = new QueryWrapper<>();
+            allQueryWrapper.eq("user_id", state.getUserId());
+            documentList = documentMapper.selectList(allQueryWrapper);
             state.setRetrievalGlobalFlag(true);
         }
-//
+
 //        String documentsAbstract = documentList.stream()
 //                .map(document -> document.getDocumentName() + "的摘要:"+ document.getDescription().substring(0,100))
 //                .collect(Collectors.joining("\n"));
+        // 建立文档名称-大小Map
+        Map<String, Long> documentSizeMap = new HashMap<>();
+
+        String documentsName = documentList.stream()
+                .map(document -> {
+                    documentSizeMap.put(document.getDocumentName(), document.getFileSize());
+                    return document.getDocumentName();
+                })
+                .collect(Collectors.joining(", "));
 
         String prompt = CHOOSE_TEMPLATE.formatted(
-//                documentsAbstract,
-                (state.getRetrievalQuery() == null || state.getRetrievalQuery().isEmpty()) ? state.getQuery() : state.getRetrievalQuery()
+                (state.getRetrievalQuery() == null || state.getRetrievalQuery().isEmpty()) ? state.getQuery() : state.getRetrievalQuery(),
+                documentsName
         );
 
         String result = douBaoLite.chat(prompt);
@@ -136,8 +165,17 @@ public class StartWorker {
         if (retrievalDecision != null) {
             state.setRetrievalWebFlag(retrievalDecision.isWebRetrievalFlag());
             state.setLocalRetrievalFlag(retrievalDecision.isLocalRetrievalFlag());
-            state.setRetrievalDocuments(retrievalDecision.getRelatedDocuments());
+            state.setHistoryChatRequirements(retrievalDecision.isHistoryChatRequirements());
+            state.getRetrievalDocuments().putAll(
+                    retrievalDecision.getRelatedDocuments()
+                            .stream()
+                            .collect(Collectors.toMap(
+                                    documentName -> documentsName,
+                                    documentSizeMap::get
+                            ))
+            );
         }
+        rabbitTemplate.convertAndSend("refection.direct", "new.problem", state);
     }
 
     public RetrievalDecision parseLLMJson(String llmOutput) {
@@ -155,4 +193,3 @@ public class StartWorker {
         }
     }
 }
-

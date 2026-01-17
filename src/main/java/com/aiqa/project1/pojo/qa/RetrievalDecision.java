@@ -1,8 +1,14 @@
 package com.aiqa.project1.pojo.qa;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 import java.util.List;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
+@Data
 public class RetrievalDecision {
     @JsonProperty("related_documents")
     private List<String> relatedDocuments;
@@ -10,33 +16,11 @@ public class RetrievalDecision {
     @JsonProperty("web_retrieval_flag")
     private boolean webRetrievalFlag;
 
-    @JsonProperty("local_retrieval_flag")
+    @JsonProperty("additional_local_search_requirements")
     private boolean localRetrievalFlag;
 
-    // Getters and Setters
-    public List<String> getRelatedDocuments() {
-        return relatedDocuments;
-    }
-
-    public void setRelatedDocuments(List<String> relatedDocuments) {
-        this.relatedDocuments = relatedDocuments;
-    }
-
-    public boolean isWebRetrievalFlag() {
-        return webRetrievalFlag;
-    }
-
-    public void setWebRetrievalFlag(boolean webRetrievalFlag) {
-        this.webRetrievalFlag = webRetrievalFlag;
-    }
-
-    public boolean isLocalRetrievalFlag() {
-        return localRetrievalFlag;
-    }
-
-    public void setLocalRetrievalFlag(boolean localRetrievalFlag) {
-        this.localRetrievalFlag = localRetrievalFlag;
-    }
+    @JsonProperty("history_chat_requirements")
+    private boolean historyChatRequirements;
 
     @Override
     public String toString() {

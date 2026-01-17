@@ -38,20 +38,6 @@ public abstract class AbstractRetrieveWorker {
     protected final RateLimiter rateLimiter;
     protected final MilvusSearchUtils milvusSearchUtils;
 
-    @Value("${milvus.collection-name}")
-    protected String collectionName;
-
-//    @Value("${milvus.collection.vector.field}")
-//    protected String vectorField;
-//
-//    @Value("${milvus.collection.text.field}")
-//    protected String textField;
-//
-//    @Value("${milvus.collection.id.field}")
-//    protected String idField;
-
-    /**
-     */
     protected AbstractRetrieveWorker(
             RabbitTemplate rabbitTemplate,
             RedisTemplate<String, Object> redisTemplate,
@@ -85,11 +71,11 @@ public abstract class AbstractRetrieveWorker {
             }
 
             Integer userId = state.getUserId();
-            String query = (state.getRetrievalQuery() == null) ? state.getQuery() : state.getRetrievalQuery();
             Integer sessionId = state.getSessionId();
+            String query = (state.getRetrievalQuery() == null) ? state.getQuery() : state.getRetrievalQuery();
 
                     // 提取关键词
-            String keywords = extractKeywords(query);
+            String keywords = extractKeywords(state);
             
             // 执行具体检索逻辑
             List<Content> retrievalInformation = performRetrieve(
@@ -120,10 +106,11 @@ public abstract class AbstractRetrieveWorker {
 
     /**
      * 提取关键词
-     * @param query 查询文本
+     * @param state
      * @return 关键词
      */
-    protected String extractKeywords(String query) {
+    protected String extractKeywords(State state) {
+        String query = (state.getRetrievalQuery() == null) ? state.getQuery() : state.getRetrievalQuery();
         try {
             String prompt = "你是一个关键词提取专家，请从以下文本中提取最重要的关键词，只返回关键词，不要其他内容：\n" + query;
             String keywords = timeoutControl.chatWithTimeout(douBaoLite, prompt);
