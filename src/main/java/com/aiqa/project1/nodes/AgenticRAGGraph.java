@@ -1,0 +1,465 @@
+package com.aiqa.project1.nodes;
+
+import com.aiqa.project1.config.SystemConfig;
+import com.aiqa.project1.mapper.DocumentMapper;
+import com.aiqa.project1.pojo.document.Document;
+import com.aiqa.project1.pojo.qa.RetrievalDecision;
+import com.aiqa.project1.utils.*;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.model.openai.OpenAiChatModel;
+import io.milvus.v2.service.vector.response.SearchResp;
+import org.bsc.langgraph4j.CompileConfig;
+import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.GraphStateException;
+import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.action.AsyncNodeAction;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
+
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+import static org.bsc.langgraph4j.StateGraph.END;
+import static org.bsc.langgraph4j.StateGraph.START;
+import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
+
+@Component
+public class AgenticRAGGraph {
+    private final OpenAiChatModel douBaoLite;
+    private final MilvusSearchUtils milvusSearchUtils;
+    private final QuerySplitter querySplitter;
+    private final AsyncTaskExecutor asyncTaskExecutor;
+
+    // 反思提示模板：评估回答质量，生成反思结论
+    private static final String REFLECTION_TEMPLATE = """
+            用户问题：%s
+            当前回答：%s
+            检索到的信息：%s
+            请评估回答是否满足以下要求：
+            1. 回答是否基于检索信息，无编造内容；
+            2. 回答是否完整覆盖用户问题的核心诉求；
+            3. 回答逻辑是否通顺，无明显错误。
+            反思要求：
+            - 若回答满足要求，输出"回答合格，可结束"；
+            - 若回答不满足（如信息不足、逻辑错误），输出具体问题（如"检索信息未覆盖用户问题中的XX点"）。
+            """;
+
+    // 回答生成模板
+    private static final String FINAL_ANSWER_TEMPLATE = """
+            用户提出了一个复杂问题：
+            %s
+            
+            为了回答这个问题，我们将其拆解为以下子问题并分别进行了调研：
+            %s
+            
+            之前的对话如下所示：
+            %s
+            
+            请综合上述子问题的调研结果，生成用户原始问题的最终完整答案。
+            要求：
+            1. 逻辑通顺，结构清晰。
+            2. 如果子问题由于缺乏信息未能回答，请在最终答案中如实说明缺失的部分。
+            3. 不要暴露内部工具调用的细节，直接以专家的口吻回答。
+            """;
+
+
+    private static final String SUB_QUERY_TEMPLATE = """
+            以下是子查询的内容：
+            %s
+            
+            以下是检索到的相关信息：
+            %s
+            
+            请根据检索信息回答查询，现在请生成回答：
+            """;
+
+    private static final String REWRITER_TEMPLATE = """
+            你是一名专业的RAG 检索优化助手，核心职责是基于用户原始问题和问题反思内容，生成更精准、更清晰、更适配知识库检索的优化问题，提升检索召回的相关性与有效性。
+            以下是原问题以及反思的内容：
+            用户问题：%s
+            反思内容：%s
+            
+            
+            请严格遵循以下要求完成问题重写：
+            核心锚定：必须保留原始问题的核心诉求，不得偏离用户的根本意图。
+            歧义消除：根据反思内容，修正原始问题中的模糊表述、多义词汇、指代不明等问题。
+            信息补全：结合反思指出的信息缺失点（如缺少场景、条件、限定范围等），补充关键要素，让问题更具体。
+            检索适配：调整问题的表述方式，使其更贴合知识库的语义结构，便于向量检索或关键词检索匹配到相关知识。
+            简洁精炼：优化后的问题需简洁明了，避免冗余话术，同时避免过度扩展导致核心诉求弱化。
+            文档提取与标注：若原始问题或反思内容中明确提及需要参照的文档全名，需精准提取该文档名称，为其添加书名号，并自然融入重写后的问题中；若提及多个文档，需全部提取并标注。
+            注意：禁止添加问题里没有明确提及的文档名称
+            """;
+
+    private final String CHOOSE_TEMPLATE = """
+                请完成以下任务：
+                根据用户查询，判断回答用户问题的信息来源，如果提及相关文献的名称，则返回文档的名称。并识别用户的意图，如果需要上网查询，则告知网络查询。文档名称返回json格式
+                首先，请明确用户的具体查询：
+                <user_query>
+                %s
+                </user_query>
+                其次，明确数据库里的文件：
+                <Document>
+                %s
+                </Document>
+                
+                需要上网查询的用户问题需要包含以下几个方面的其中一条：
+                1. 时效性强：涉及最新事件（如“2025年奥运会举办城市”）、实时数据（股价、天气）、近期政策变动等，本地知识库未覆盖或已过期。
+                2. 高度动态性：信息频繁变化（如商品价格、航班状态、社交媒体热点），难以在本地静态文档中维护。
+                3. 长尾/冷门问题：极其专业或罕见的问题（如某小众开源库的 API 用法），本地知识库未收录。
+                4. 事实验证需求：需要交叉验证多个权威来源（如新闻事件、科学发现），而本地仅有一家之言。
+                5. 用户明确要求外部信息：用户提问包含“网上说…”、“最新报道”、“全球趋势”等暗示需外部数据的关键词。
+                
+                
+                严格按照以下输出格式输出：
+                {
+                    "related_documents": ["第一份文档.pdf", "第二份文档.docx", ..., "第N份文档.md"]
+                    "web_retrieval_flag": false/true,
+                    "additional_local_search_requirements": false/true,
+                    "history_chat_requirements": false/true
+                }
+                其中，"related_documents"包含检索中明确提及的文档，"web_retrieval_flag"代表是否需要使用网络检索，true代表需要检索，false代表不需要检索；
+                "additional_local_search_requirements"代表除了"related_documents"中提及的文件外，是否还需要从本地数据库中检索别的文件的信息，true代表需要别的文件的信息，false代表不需要。
+                "history_chat_requirements"代表用户查询有提及，暗示需要从历史信息中获取文档名称或者有这方面的意图，如果有需要从历史对话中找文件名称的意图，"history_chat_requirements"为true，否则为false，
+                注意，如果"history_chat_requirements"为true，则不需要"additional_local_search_requirements"再为true了
+                <案例>
+                
+                问题：fafafas.pdf文档和sfaff.docs文档分别讲了什么？
+                响应：
+                {
+                    "related_documents": ["fafafas.pdf", "sfaff.docs"]
+                    "web_retrieval_flag": false,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": false
+                }
+                
+                问题：fafafas.pdf文档描述的地方现在气温多少度？
+                响应：
+                {
+                    "related_documents": ["fafafas.pdf"]
+                    "web_retrieval_flag": true,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": false
+                }
+                
+                问题：沈阳今日气温多少度？
+                响应：
+                {
+                    "related_documents": [],
+                    "web_retrieval_flag": true,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": false
+                }
+                
+                问题：请根据本地数据库回答，langchain是什么？
+                响应：
+                {
+                    "related_documents": [],
+                    "web_retrieval_flag": false,
+                    "additional_local_search_requirements": true
+                    "history_chat_requirements": true
+                }
+                
+                问题：之前提及的文件中，langchain是什么？
+                响应：
+                {
+                    "related_documents": [],
+                    "web_retrieval_flag": false,
+                    "additional_local_search_requirements": false
+                    "history_chat_requirements": true
+                }
+                </案例>
+                """;
+
+    private final RedisStoreUtils redisStoreUtils;
+    private final CacheAsideUtils cacheAsideUtils;
+    private final RabbitTemplate rabbitTemplate;
+    private final DocumentMapper documentMapper;
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    public AgenticRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils milvusSearchUtils, QuerySplitter querySplitter, AsyncTaskExecutor asyncTaskExecutor, RedisStoreUtils redisStoreUtils, CacheAsideUtils cacheAsideUtils, RabbitTemplate rabbitTemplate, DocumentMapper documentMapper) {
+        this.douBaoLite = douBaoLite;
+        this.milvusSearchUtils = milvusSearchUtils;
+        this.querySplitter = querySplitter;
+        this.asyncTaskExecutor = asyncTaskExecutor;
+        this.redisStoreUtils = redisStoreUtils;
+        this.cacheAsideUtils = cacheAsideUtils;
+        this.rabbitTemplate = rabbitTemplate;
+        this.documentMapper = documentMapper;
+    }
+
+    public CompiledGraph<AgenticRAGState> buildGraph() throws GraphStateException {
+        // 0. 开始节点
+        AsyncNodeAction<AgenticRAGState> startAction = node_async(state -> {
+            boolean RetrievalGlobalFlag = false;
+            boolean RetrievalWebFlag = false;
+            boolean LocalRetrievalFlag = true;
+            boolean HistoryChatRequirements = false;
+
+            Integer sessionId = state.getSessionId();
+            QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
+            List<Document> documentList;
+
+            //        queryWrapper.like("session_id", sessionId.toString());
+            queryWrapper.apply("FIND_IN_SET({0}, session_id) > 0", sessionId);
+            queryWrapper.eq("user_id", state.getUserId());
+            documentList = documentMapper.selectList(queryWrapper);
+
+            // 当前会话没有传递文件，用数据库进行回答
+            if (documentList == null || documentList.isEmpty()) {
+                QueryWrapper<Document> allQueryWrapper = new QueryWrapper<>();
+                allQueryWrapper.eq("user_id", state.getUserId());
+                documentList = documentMapper.selectList(allQueryWrapper);
+                RetrievalGlobalFlag = true;
+            }
+            Map<String, Long> documentSizeMap = new HashMap<>();
+
+            String documentsName = documentList.stream()
+                    .map(document -> {
+                        documentSizeMap.put(document.getDocumentName(), document.getFileSize());
+                        return document.getDocumentName();
+                    })
+                    .collect(Collectors.joining(", "));
+            String query = "原问题：" + state.getQuery() + ((state.getRewriteQuery().isEmpty()) ? "": "\n反思重写后的问题：" + state.getRewriteQuery());
+
+            String prompt = CHOOSE_TEMPLATE.formatted(
+                    query,
+                    documentsName
+            );
+
+            String result = douBaoLite.chat(prompt);
+            RetrievalDecision retrievalDecision = this.parseLLMJson(result);
+            // 将相关文档以及检索来源写入state里
+            if (retrievalDecision != null) {
+                RetrievalWebFlag = retrievalDecision.isWebRetrievalFlag();
+                LocalRetrievalFlag = retrievalDecision.isLocalRetrievalFlag();
+                HistoryChatRequirements = retrievalDecision.isHistoryChatRequirements();
+
+            }
+            return Map.of(
+                    "retrieval_global_flag", RetrievalGlobalFlag,
+                    "retrieval_web_flag", RetrievalWebFlag,
+                    "local_retrieval_flag", LocalRetrievalFlag,
+                    "history_chat_requirements", HistoryChatRequirements
+                    );
+        });
+
+        // 1. 决策节点：判断下一步动作（检索/结束）
+        AsyncNodeAction<AgenticRAGState> decisionAction = node_async(state -> {
+            String currentDecision = state.getDecision();
+            if (currentDecision.equals(DecisionType.FINISH.toString())) {
+                rabbitTemplate.convertAndSend(
+                        "mysql.update",
+                        "chat.memory",
+                        new State(
+                                state.getUserId(),
+                                state.getSessionId(),
+                                state.getMemoryId(),
+                                state.getQuery()
+                        ));
+            }
+            // 首次进入/反思后需要重新检索 → 保持RETRIEVE；反思后回答合格 → 设为FINISH
+            return Map.of("decision", currentDecision);
+        });
+
+        AsyncNodeAction<AgenticRAGState> rewriteAction = node_async(state -> {
+            String currentDecision = state.getDecision();
+            String currentReflection = state.getReflection();
+            String chat = douBaoLite.chat(REWRITER_TEMPLATE.formatted(state.getQuery(), currentReflection));
+
+            redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI思考>原问题改写为" + chat);
+            // 首次进入/反思后需要重新检索 → 保持RETRIEVE；反思后回答合格 → 设为FINISH
+            return Map.of(
+                    "decision", currentDecision,
+                    "rewrite_query", chat
+            );
+        });
+
+        // 2. 检索节点：基于用户问题+过滤条件执行混合检索
+        AsyncNodeAction<AgenticRAGState> retrievalAction = node_async(state -> {
+            String query = "原问题：" + state.getQuery() + "\n反思重写后的问题：" + state.getRewriteQuery();
+
+            List<SubQuery1> subQuery = querySplitter.splitQuery(
+                    query,
+                    state.getToolMetadataList()
+            );
+
+            redisStoreUtils.setChatMemory(
+                    state.getUserId(),
+                    state.getSessionId(),
+                    "<AI思考>原问题经AI拆解为以下子问题：\n" + subQuery.stream().map(subQuery1 -> "    " + subQuery1.getSub_question()).collect(Collectors.joining("\n"))
+            );
+
+            List<Map<String, List<String>>> retrievalInfo = new ArrayList<>();
+
+            // 提取文档过滤条件
+            List<String> documentName = RegexValidate.extractContentInBookMark(query);
+            String filterExpr = null;
+            if (documentName != null && !documentName.isEmpty()) {
+                StringBuilder valuesStr = new StringBuilder();
+                for (int i = 0; i < documentName.size(); i++) {
+                    valuesStr.append("\"").append(documentName.get(i)).append("\"");
+                    if (i != documentName.size() - 1) {
+                        valuesStr.append(", ");
+                    }
+                }
+                filterExpr = String.format("come_from in [%s]", valuesStr);
+            }
+
+            // 子查询批量检索
+            try {
+                for (SubQuery1 sq : subQuery) {
+                    SearchResp searchResp = milvusSearchUtils.hybridSearch(
+                            sq.getSub_question(),
+                            sq.getSub_question(),
+                            state.getUserId(),
+                            (state.getRetrievalGlobalFlag()) ? 0 : state.getSessionId(),  // 如果用户未在搜索框添加文件，则全局检索
+                            10, 60, filterExpr
+                    );
+                    List<String> contentList = MilvusSearchUtils.getContentsFromSearchResp(searchResp)
+                            .stream().map(Objects::toString).toList();
+                    retrievalInfo.add(Map.of(sq.getSub_question(), contentList));
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return Map.of("retrieval_info", retrievalInfo);
+        });
+
+        // 3. 回答节点：基于检索信息生成回答
+        AsyncNodeAction<AgenticRAGState> answerAction = node_async(state -> {
+
+            List<Map<String, List<String>>> childQuery = state.getRetrievalInfo();
+            List<String> subQuery1 = childQuery.stream().map(childQuery1 -> childQuery1.keySet().iterator().next()).toList();
+            List<Supplier<SubQuery1>> task_list = new ArrayList<>();
+            try {
+                for (int i = 0; i < childQuery.size(); i++) {
+                    Map<String, List<String>> retrievalInfo = childQuery.get(i);
+                    String subQuery = subQuery1.get(i);
+                    List<String> contentList = retrievalInfo.get(subQuery);
+
+                    Supplier<SubQuery1> subQuerySupplier = () -> {
+                        SubQuery1 query1 = new SubQuery1(subQuery, "");
+                        String chat = douBaoLite.chat(SUB_QUERY_TEMPLATE.formatted(subQuery, contentList.toString()));
+                        query1.setSub_answer(chat);
+                        return query1;
+                    };
+                    task_list.add(subQuerySupplier);
+                }
+                List<SubQuery1> resultFuture = asyncTaskExecutor.submitAllWithResult(task_list).get();
+                String finalAnswer = generateFinalAnswer(state, resultFuture);
+                return Map.of("answer", finalAnswer);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                e.printStackTrace();
+            }
+            return Map.of();
+        });
+
+        // 4. 反思节点：评估回答质量，生成反思内容，并更新决策
+        AsyncNodeAction<AgenticRAGState> reflectionAction = node_async(state -> {
+            String answer = state.getAnswer();
+            String prompt = REFLECTION_TEMPLATE.formatted(
+                    state.getQuery(),
+                    answer,
+                    state.getRetrievalInfo().toString()
+            );
+            String reflection = douBaoLite.chat(prompt);
+
+            // 根据反思结果更新决策：反思含"合格"则结束，否则重新检索
+            String newDecision = reflection.contains("合格") ? DecisionType.FINISH.toString() : DecisionType.RETRIEVE.toString();
+            if (newDecision.contains(DecisionType.FINISH.toString())) {
+                redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<最终回答>" + answer);
+            } else {
+                redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI思考>" + answer);
+            }
+
+            return Map.of(
+                    "reflection", reflection,
+                    "decision", newDecision
+            );
+        });
+
+
+
+
+        // 构建状态图：实现决策→检索→回答→反思→决策的闭环
+        StateGraph<AgenticRAGState> graph = new StateGraph<>(AgenticRAGState.SCHEMA, AgenticRAGState::new)
+                // 注册节点
+                .addNode("start", startAction)
+                .addNode("decision", decisionAction)
+                .addNode("rewrite", rewriteAction)
+                .addNode("retrieval", retrievalAction)
+                .addNode("answer", answerAction)
+                .addNode("reflection", reflectionAction)
+                // 起始节点→决策节点
+                .addEdge(START, "start")
+                .addEdge("start", "decision")
+                // 决策节点分支：RETRIEVE→检索节点，FINISH→END
+                .addConditionalEdges("decision",
+                        state -> CompletableFuture.supplyAsync(state::getDecision), // 分支判断依据：决策类型
+                        Map.of(
+                                DecisionType.RETRIEVE.toString(), "rewrite",
+                                DecisionType.FINISH.toString(), END
+                        )
+                )
+                // 检索→回答→反思→决策（闭环）
+                .addEdge("rewrite", "retrieval")
+                .addEdge("retrieval", "answer")
+                .addEdge("answer", "reflection")
+                .addEdge("reflection", "decision");
+
+        // 编译图：启用内存检查点（保存状态，支撑闭环）
+        CompileConfig compileConfig = CompileConfig.builder()
+                .checkpointSaver(new MemorySaver())
+                .build();
+        return graph.compile(compileConfig);
+    }
+
+    /**
+     * 生成最终答案
+     */
+    private String generateFinalAnswer(AgenticRAGState originalQuery, List<SubQuery1> processedQueries) {
+        StringBuilder contextBuilder = new StringBuilder();
+
+        for (SubQuery1 sq : processedQueries) {
+            contextBuilder.append("--- 子问题 ---\n")
+                    .append(sq.getSub_question()).append("\n")
+                    .append("--- 调研结果 ---\n")
+                    .append(sq.getSub_answer()).append("\n\n");
+        }
+
+        String chatHistory = redisStoreUtils.getChatMemory(
+                        originalQuery.getUserId(),
+                        originalQuery.getSessionId(),
+                        SystemConfig.MAX_REWRITE_HISTORY_SIZE).stream()
+                .map(Object::toString)
+                .collect(Collectors.joining("\n"));
+        String prompt = FINAL_ANSWER_TEMPLATE.formatted(originalQuery.getQuery(), contextBuilder.toString(), chatHistory);
+        return douBaoLite.chat(prompt);
+    }
+
+    public RetrievalDecision parseLLMJson(String llmOutput) {
+        // 1. 清理LLM输出中可能的多余字符（比如前后的说明文字、空格）
+        String cleanedJson = llmOutput.trim()
+                // 移除JSON前后可能的非JSON字符（LLM可能多输出"答："等）
+                .replaceAll("^[^\\{]*", "")
+                .replaceAll("[^\\}]*$", "");
+
+        // 2. 解析为目标Map
+        try {
+            return OBJECT_MAPPER.readValue(cleanedJson, RetrievalDecision.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse LLM response to JSON: " + e.getMessage(), e);
+        }
+    }
+
+
+
+}

@@ -29,11 +29,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+
 @Component
 public class MilvusSearchUtils {
 
     private final MilvusClientV2 milvusClient;
     private final EmbeddingModel onnxMiniLML12V2EmbeddingModel;
+
+    private final List<String> outFieldsWithParent = Arrays.asList("text", "come_from", "parent_text", "parent_id", "title", "author");
+    private final List<String> outFieldsNoParent = Arrays.asList("text", "come_from", "title", "author");
+
+    private static final List<String> outMetadata = Arrays.asList("come_from", "title", "author", "parent_id");
+
 
     @Value("${milvus.collection-name}")
     private String collectionName;
@@ -130,6 +137,19 @@ public class MilvusSearchUtils {
                 .outputFieldNames(Collections.singletonList("text_sparse"))
                 .build());
 
+        schema.addField(AddFieldReq.builder()
+                .fieldName("parent_id")
+                .dataType(DataType.VarChar)
+                .maxLength(50)
+                .build());
+
+        schema.addField(AddFieldReq.builder()
+                .fieldName("parent_text")
+                .dataType(DataType.VarChar)
+                .maxLength(4000) // 父块通常较长，调大最大长度
+                .enableAnalyzer(false) // 通常父块作为结果返回，不参与 BM25 检索则无需 enableAnalyzer
+                .build());
+
         // 创建索引
         Map<String, Object> denseParams = new HashMap<>();
 
@@ -184,7 +204,8 @@ public class MilvusSearchUtils {
             Integer userId,
             Integer sessionId,
             int topK,
-            Object rerankerParams
+            Object rerankerParams,
+            String expr
     ) {
         // 混合检索
         float[] queryDense = onnxMiniLML12V2EmbeddingModel.embed(query).content().vector();
@@ -193,19 +214,23 @@ public class MilvusSearchUtils {
         List<BaseVector> queryDenseVectors = Collections.singletonList(new FloatVec(queryDense));
 
         List<AnnSearchReq> searchRequests = new ArrayList<>();
+        String expr_ = ((sessionId == 0) ? "":"session_id==%s".formatted(sessionId));
+        if (expr != null && ! expr.isEmpty()) {
+            expr_ = expr_.isEmpty() ? expr : expr_ + " AND " + expr;
+        }
         searchRequests.add(AnnSearchReq.builder()
                 .vectorFieldName("text_dense")
                 .vectors(queryDenseVectors)
                 .params("{\"nprobe\": 10, \"ef\": 50, \"M\": 16}")
-                .topK(topK)
-                .expr((sessionId == 0) ? "":"session_id==%s".formatted(sessionId))
+                .topK(topK * 5)
+                .expr(expr_)
                 .build());
         searchRequests.add(AnnSearchReq.builder()
                 .vectorFieldName("text_sparse")
                 .vectors(queryTexts)
                 .params("{\"drop_ratio_search\": 0.2}")
-                .topK(topK)
-                .expr((sessionId == 0) ? "":"session_id==%s".formatted(sessionId))
+                .topK(topK * 5)
+                .expr(expr_)
                 .build());
 
 
@@ -230,12 +255,12 @@ public class MilvusSearchUtils {
                 }
             };
         }
-        String[] outFields = {"text", "come_from"};
+
         HybridSearchReq hybridSearchReq = HybridSearchReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .searchRequests(searchRequests)
                 .ranker(reranker)
-                .outFields(Arrays.asList(outFields))
+                .outFields(outFieldsWithParent)
                 .topK(topK)
                 .build();
         return milvusClient.hybridSearch(hybridSearchReq);
@@ -245,14 +270,12 @@ public class MilvusSearchUtils {
      * 精确匹配过滤：查询 come_from 等于指定值的结果(无向量检索)
      * @param userId 用户ID
      * @param targetValue 目标值
-     * @param outputFields 需要返回的字段列表
      * @return 查询结果
      */
     public QueryResp filterByComeFromExact(
             Integer userId,
             Integer sessionId,
-            String targetValue,
-            List<String> outputFields
+            String targetValue
     ) throws Exception {
         List<String> filterConditions = new ArrayList<>();
 
@@ -266,7 +289,7 @@ public class MilvusSearchUtils {
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .filter(String.join(" AND ", filterConditions))
-                .outputFields(outputFields)
+                .outputFields(outFieldsNoParent)
                 .build();
 
         // 此处假设已初始化 MilvusClient 实例（实际使用时需传入）
@@ -277,13 +300,11 @@ public class MilvusSearchUtils {
      * 多值匹配过滤：查询 come_from 在指定值列表中的结果(无向量检索)
      * @param userId 用户ID
      * @param values 目标值列表
-     * @param outputFields 需要返回的字段列表
      * @return 查询结果
      */
     public QueryResp filterByComeFromIn(Integer userId,
                                         Integer sessionId,
-                                        List<String> values,
-                                        List<String> outputFields) throws Exception {
+                                        List<String> values) throws Exception {
         // 构建 in 表达式：数组元素用双引号包裹
         StringBuilder valuesStr = new StringBuilder();
         for (int i = 0; i < values.size(); i++) {
@@ -304,7 +325,7 @@ public class MilvusSearchUtils {
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .filter(String.join(" AND ", filterConditions))
-                .outputFields(outputFields)
+                .outputFields(outFieldsNoParent)
                 .build();
 
         // 此处假设已初始化 MilvusClient 实例（实际使用时需传入）
@@ -315,13 +336,11 @@ public class MilvusSearchUtils {
      * 多值匹配过滤：查询 come_from 在指定值列表中的结果(无向量检索)
      * @param userId 用户ID
      * @param values 目标值列表
-     * @param outputFields 需要返回的字段列表
      * @return 查询结果
      */
     public QueryResp filterByComeFromIn(Integer userId,
                                         Integer sessionId,
-                                        String values,
-                                        List<String> outputFields) {
+                                        String values) {
 
         List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from in [%s]", values);
@@ -334,7 +353,7 @@ public class MilvusSearchUtils {
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .filter(String.join(" AND ", filterConditions))
-                .outputFields(outputFields)
+                .outputFields(outFieldsNoParent)
                 .build();
 
         // 此处假设已初始化 MilvusClient 实例（实际使用时需传入）
@@ -345,13 +364,12 @@ public class MilvusSearchUtils {
      * 排除匹配过滤：查询 come_from 不等于指定值的结果
      * @param userId 用户ID
      * @param excludeValue 需排除的值
-     * @param outputFields 需要返回的字段列表
      * @return 查询结果
      */
     public QueryResp filterByComeFromNotEqual(Integer userId,
-                                                    Integer sessionId,
-                                                    String excludeValue,
-                                                    List<String> outputFields) throws Exception {
+                                              Integer sessionId,
+                                              String excludeValue
+    ) throws Exception {
 
         List<String> filterConditions = new ArrayList<>();
         String filterExpr = String.format("come_from == \"%s\"", excludeValue);
@@ -363,7 +381,7 @@ public class MilvusSearchUtils {
         QueryReq queryParam = QueryReq.builder()
                 .collectionName(collectionName + "_" +userId.toString())
                 .filter(String.join(" AND ", filterConditions))
-                .outputFields(outputFields)
+                .outputFields(outFieldsNoParent)
                 .build();
 
         return milvusClient.query(queryParam);
@@ -405,7 +423,7 @@ public class MilvusSearchUtils {
                 .data(queryVector)
                 .topK(topK)
                 .filter(String.join(" AND ", filterConditions)) // 详见https://milvus.io/docs/zh/boolean.md
-                .outputFields(Arrays.asList("text", "come_from", "title", "author"))
+                .outputFields(outFieldsWithParent)
                 .searchParams(searchParamsMap)
                 .build();
         return milvusClient.search(searchReq);
@@ -446,7 +464,7 @@ public class MilvusSearchUtils {
                 .data(queryVector)
                 .topK(topK)
                 .filter(String.join(" AND ", filterConditions)) // 详见https://milvus.io/docs/zh/boolean.md
-                .outputFields(Arrays.asList("text", "come_from", "title", "author"))
+                .outputFields(outFieldsWithParent)
                 .searchParams(searchParamsMap)
                 .build();
         return milvusClient.search(searchReq);
@@ -475,11 +493,11 @@ public class MilvusSearchUtils {
     public static List<Content> getContentsFromSearchResp(SearchResp searchResp) {
         List<List<SearchResp.SearchResult>> searchResultsList = searchResp.getSearchResults();
 
-        List<Content> contents = new ArrayList<>();
+        Map<String, Content> contents = new HashMap<>();
 
         // 处理检索结果（外层List通常对应多查询向量，这里取第一个）
         if (searchResultsList == null || searchResultsList.isEmpty()) {
-            return contents;
+            return contents.values().stream().toList();
         }
 
         List<SearchResp.SearchResult> searchResults = searchResultsList.getFirst();
@@ -491,20 +509,33 @@ public class MilvusSearchUtils {
             }
 
             // 提取文本内容（对应Milvus中的"text"字段）
-            String text = (String) entity.get("text");
-            if (text == null || text.trim().isEmpty()) {
+            String parentText = (String) entity.get("parent_text");
+            String childText = (String) entity.get("text");
+
+            if (childText == null || childText.trim().isEmpty()) {
                 continue;
             }
 
             // 构建TextSegment的元数据（包含来源信息）
             Map<String, Object> textSegmentMetadata = new HashMap<>();
+            outMetadata.forEach(metadata -> {
+                String var = (String) entity.get(metadata);
+                if (var != null) {
+                    textSegmentMetadata.put(metadata, var); // 存储来源信息
+                }
+            });
 
-            String comeFrom = (String) entity.get("come_from");
-            System.out.println("comeFrom:" + comeFrom);
-            if (comeFrom != null) {
-                textSegmentMetadata.put("come_from", comeFrom); // 存储来源信息
+            String parentId = (String) textSegmentMetadata.get("parent_id");
+            if (parentId == null || parentId.trim().isEmpty()) {
+                // 文档名Filter类的检索都没有parentId
+                parentId = UUID.randomUUID().toString();
+            } else if (contents.get(parentId) != null) {
+                // 如果之前存了相关的parent_text，就没必要再存一遍了
+                continue;
             }
-            TextSegment textSegment = TextSegment.from(text, new Metadata(textSegmentMetadata));
+
+            String finalContent = (parentText != null) ? parentText : childText;
+            TextSegment textSegment = TextSegment.from(finalContent, new Metadata(textSegmentMetadata));
 
 
             // 构建Content的元数据（包含得分、ID等）
@@ -521,20 +552,20 @@ public class MilvusSearchUtils {
 
             // 创建Content并添加到结果列表
             Content content = Content.from(textSegment, contentMetadata);
-            contents.add(content);
+            contents.put(parentId, content);
         }
 
-        return contents;
+        return contents.values().stream().toList();
     }
 
     public static List<Content> getContentsFromQueryResp(QueryResp queryResp) {
         List<QueryResp.QueryResult> queryResultList = queryResp.getQueryResults();
 
-        List<Content> contents = new ArrayList<>();
+        Map<String, Content> contents = new HashMap<>();
 
         // 处理检索结果（外层List通常对应多查询向量，这里取第一个）
         if (queryResultList == null || queryResultList.isEmpty()) {
-            return contents;
+            return contents.values().stream().toList();
         }
 
         for (QueryResp.QueryResult result : queryResultList) {
@@ -544,19 +575,33 @@ public class MilvusSearchUtils {
             }
 
             // 提取文本内容（对应Milvus中的"text"字段）
-            String text = (String) entity.get("text");
-            if (text == null || text.trim().isEmpty()) {
+            String parentText = (String) entity.get("parent_text");
+            String childText = (String) entity.get("text");
+            if (childText == null || childText.trim().isEmpty()) {
                 continue;
             }
 
+
             // 构建TextSegment的元数据（包含来源信息）
             Map<String, Object> textSegmentMetadata = new HashMap<>();
-            String comeFrom = (String) entity.get("come_from");
-            System.out.println("comeFrom:" + comeFrom);
-            if (comeFrom != null) {
-                textSegmentMetadata.put("come_from", comeFrom); // 存储来源信息
+            outMetadata.forEach(metadata -> {
+                String var = (String) entity.get(metadata);
+                if (var != null) {
+                    textSegmentMetadata.put(metadata, var); // 存储来源信息
+                }
+            });
+
+            String parentId = (String) textSegmentMetadata.get("parent_id");
+            if (parentId == null || parentId.trim().isEmpty()) {
+                // 文档名Filter类的检索都没有parentId
+                parentId = UUID.randomUUID().toString();
+            } else if (contents.get(parentId) != null) {
+                // 如果之前存了相关的parent_text，就没必要再存一遍了
+                continue;
             }
-            TextSegment textSegment = TextSegment.from(text, new Metadata(textSegmentMetadata));
+
+            String finalContent = (parentText != null) ? parentText : childText;
+            TextSegment textSegment = TextSegment.from(finalContent, new Metadata(textSegmentMetadata));
 
             // 构建Content的元数据（包含得分、ID等）
             Map<ContentMetadata, Object> contentMetadata = new HashMap<>();
@@ -566,10 +611,9 @@ public class MilvusSearchUtils {
 
             // 创建Content并添加到结果列表
             Content content = Content.from(textSegment, contentMetadata);
-            contents.add(content);
+            contents.put(parentId, content);
         }
 
-        return contents;
+        return contents.values().stream().toList();
     }
-
 }

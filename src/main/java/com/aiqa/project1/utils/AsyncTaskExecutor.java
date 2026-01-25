@@ -10,9 +10,12 @@ import jakarta.annotation.PreDestroy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * 异步任务执行器
@@ -119,6 +122,34 @@ public class AsyncTaskExecutor {
         },Instant.now().plusMillis(delay));
         
         return future;
+    }
+
+    /**
+     * 批量异步执行任务，并返回包含所有结果的CompletableFuture
+     * @param tasks 任务列表
+     * @param <T> 返回类型
+     * @return CompletableFuture<List<T>> 所有任务的结果列表
+     */
+    public <T> CompletableFuture<List<T>> submitAllWithResult(Iterable<Supplier<T>> tasks) {
+        // 收集每个任务的CompletableFuture
+        List<CompletableFuture<T>> futureList = new ArrayList<>();
+        for (Supplier<T> task : tasks) {
+            CompletableFuture<T> future = CompletableFuture.supplyAsync(task, documentUploadExecutor);
+            futureList.add(future);
+        }
+
+        // 等待所有任务完成后，汇总结果
+        return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0]))
+                .thenApply(v -> futureList.stream()
+                        .map(future -> {
+                            try {
+                                return future.get();
+                            } catch (InterruptedException | ExecutionException e) {
+                                // 异常处理逻辑，可根据业务调整
+                                throw new CompletionException(e);
+                            }
+                        })
+                        .collect(Collectors.toList()));
     }
 
     /**

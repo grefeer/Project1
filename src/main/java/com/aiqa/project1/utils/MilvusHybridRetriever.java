@@ -25,7 +25,7 @@ public class MilvusHybridRetriever {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, topK, rerankerParams);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, topK, rerankerParams, null);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
@@ -33,7 +33,7 @@ public class MilvusHybridRetriever {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 10, rerankerParams);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 10, rerankerParams, null);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
@@ -41,7 +41,7 @@ public class MilvusHybridRetriever {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 10, 60);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 10, 60, null);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 
@@ -49,7 +49,7 @@ public class MilvusHybridRetriever {
         if (userId == null || keywords == null) {
             throw new RuntimeException("MilvusContentRetriever requires user id and keywords");
         }
-        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 5, 60);
+        SearchResp searchResp = milvusSearchUtils.hybridSearch(query.text(), keywords, userId, sessionId, 5, 60, null);
         return MilvusSearchUtils.getContentsFromSearchResp(searchResp);
     }
 

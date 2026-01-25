@@ -27,7 +27,7 @@ public class MilvusQueryRetriever {
         }
         QueryResp queryResp;
         try {
-            queryResp = milvusSearchUtils.filterByComeFromIn(userId, sessionId, filteredWords, List.of("come_from", "text", "title", "author"));
+            queryResp = milvusSearchUtils.filterByComeFromIn(userId, sessionId, filteredWords);
             return MilvusSearchUtils.getContentsFromQueryResp(queryResp);
 
         } catch (Exception e) {

@@ -1,6 +1,5 @@
 package com.aiqa.project1.config;
 
-import com.aiqa.project1.nodes.StateGraph1;
 import dev.langchain4j.http.client.spring.restclient.SpringRestClientBuilder;
 import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.model.ollama.OllamaChatModel;

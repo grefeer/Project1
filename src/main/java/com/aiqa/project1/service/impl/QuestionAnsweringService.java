@@ -3,6 +3,7 @@ package com.aiqa.project1.service.impl;
 
 import com.aiqa.project1.mapper.SessionChatMapper;
 import com.aiqa.project1.mapper.UserChatMemoryMapper;
+import com.aiqa.project1.nodes.*;
 import com.aiqa.project1.pojo.ResponseCode;
 import com.aiqa.project1.pojo.Result;
 import com.aiqa.project1.pojo.qa.SessionChat;
@@ -14,8 +15,11 @@ import com.aiqa.project1.worker.StateProducer;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import org.bsc.langgraph4j.CompiledGraph;
+import org.bsc.langgraph4j.GraphStateException;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
+import org.springframework.util.Assert;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -30,6 +34,14 @@ public class QuestionAnsweringService {
     private final UserChatMemoryMapper userChatMemoryMapper;
     private final CacheAsideUtils cacheAsideUtils;
     private final OpenAiChatModel douBaoLite;
+    private final NaiveRAGGraph naiveRAGGraph;
+    private final SubQueryRAGGraph subQueryRAGGraph;
+
+    List<ToolMetaData1> toolMetaDataList = new ArrayList<>();
+
+    CompiledGraph<NaiveRAGState> naiveRagStateCompiledGraph;
+    CompiledGraph<SubQueryRAGState> subQueryRAGStateCompiledGraph;
+    CompiledGraph<AgenticRAGState> agenticRagStateCompiledGraph;
 
     private static final String SESSION_SUMMARY_TEMPLATE = """
     你的任务是根据提供的对话内容，总结生成一个精准、简洁且具有概括性的标题。
@@ -46,14 +58,31 @@ public class QuestionAnsweringService {
     请在<标题>标签内输出你总结的标题。
     """;
     private final SessionChatMapper sessionChatMapper;
+    private final AgenticRAGGraph agenticRAGGraph;
 
-    public QuestionAnsweringService(StateProducer stateProducer, RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite, SessionChatMapper sessionChatMapper) {
+    public QuestionAnsweringService(StateProducer stateProducer, RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite, SessionChatMapper sessionChatMapper, AgenticRAGGraph agenticRAGGraph, NaiveRAGGraph naiveRAGGraph, SubQueryRAGGraph subQueryRAGGraph) throws GraphStateException {
         this.stateProducer = stateProducer;
         this.redisStoreUtils = redisStoreUtils;
         this.userChatMemoryMapper = userChatMemoryMapper;
         this.cacheAsideUtils = cacheAsideUtils;
         this.douBaoLite = douBaoLite;
         this.sessionChatMapper = sessionChatMapper;
+        this.agenticRAGGraph = agenticRAGGraph;
+
+        this.toolMetaDataList.add(ToolMetaData1.of(
+                "local_hybrid_retriever",
+                "包含项目文档、技术手册和知识库的本地混合检索工具"
+        ));
+        this.naiveRAGGraph = naiveRAGGraph;
+        this.subQueryRAGGraph = subQueryRAGGraph;
+
+        this.naiveRagStateCompiledGraph = naiveRAGGraph.buildGraph();
+        this.subQueryRAGStateCompiledGraph = subQueryRAGGraph.buildGraph();
+        this.agenticRagStateCompiledGraph = agenticRAGGraph.buildGraph();
+
+        Assert.notNull(naiveRagStateCompiledGraph, "buildGraph()返回null！请检查NaiveRAGGraph的构建逻辑");
+        Assert.notNull(subQueryRAGStateCompiledGraph, "buildGraph()返回null！请检查SubQueryRAGGraph的构建逻辑");
+        Assert.notNull(agenticRagStateCompiledGraph, "buildGraph()返回null！请检查AgenticRagGraph的构建逻辑");
     }
 
     /**
@@ -63,8 +92,51 @@ public class QuestionAnsweringService {
      * @param memoryId
      * @param query
      */
-    public void answerQuestion(Integer userId, Integer sessionId, Integer memoryId, String query) {
-        stateProducer.run(userId, sessionId, memoryId, query);
+    public void answerQuestion(Integer userId, Integer sessionId, Integer memoryId, String query, Integer ragMode) {
+//        stateProducer.run(userId, sessionId, memoryId, query);
+        // 1. 关键校验：检查naiveRAGGraph是否成功注入（最容易被忽略的点）
+        Assert.notNull(agenticRAGGraph, "naiveRAGGraph未成功注入！请检查Spring配置或NaiveRAGGraph的@Component注解");
+
+//        CompiledGraph<AgenticRAGState> ragStateCompiledGraph = agenticRAGGraph.buildGraph();
+//        // 校验CompiledGraph是否为null
+//        Assert.notNull(ragStateCompiledGraph, "buildGraph()返回null！请检查NaiveRAGGraph的构建逻辑");
+
+        Map<String, Object> initialStateData = new HashMap<>();
+        initialStateData.put("query", query);          // 用户查询
+        initialStateData.put("user_id", userId);            // 用户ID
+        initialStateData.put("session_id", sessionId);      // 会话ID
+        initialStateData.put("memory_id", memoryId);        // 记忆ID
+        initialStateData.put("tool_metadata_list", toolMetaDataList);
+
+        // 2. 检查initialStateData中是否有null值（框架可能不允许字段值为null）
+        for (Map.Entry<String, Object> entry : initialStateData.entrySet()) {
+            if (entry.getValue() == null) {
+                throw new IllegalArgumentException("初始状态数据中键[" + entry.getKey() + "]的值为null！");
+            }
+        }
+        redisStoreUtils.setChatMemory(userId,sessionId, "<用户问题>" + query);
+        // 3. 执行图（增加异常捕获，避免直接get()掩盖真实错误）
+        if (ragMode == null) {
+            agenticRagStateCompiledGraph.invoke(initialStateData);
+        } else if (ragMode == 1) {
+            naiveRagStateCompiledGraph.invoke(initialStateData);
+        } else if (ragMode == 2) {
+            subQueryRAGStateCompiledGraph.invoke(initialStateData);
+        } else if (ragMode == 3) {
+            agenticRagStateCompiledGraph.invoke(initialStateData);
+        } else {
+            agenticRagStateCompiledGraph.invoke(initialStateData);
+        }
+
+
+//        Optional<AgenticRAGState> future = ragStateCompiledGraph.invoke(initialStateData);
+//        AgenticRAGState finalState = future.get();
+//
+//        // 4. 提取最终回答（增加空值校验）
+//        String answer = finalState.getAnswer();
+//        Assert.notNull(answer, "最终回答为null！请检查RAG流程是否正常生成回答");
+//        System.out.println("最终回答：" + answer);
+
     }
 
     /**
@@ -115,10 +187,12 @@ public class QuestionAnsweringService {
     }
 
     @NotNull
-    public Result queryRegister(Integer userId, Integer sessionId, String question, Map<String, Object> data) {
+    public Result queryRegister(Integer userId, Integer sessionId, String question, Integer ragMode) {
         try {
+            Map<String, Object> data = new HashMap<>();
+
             Integer memoryId= Math.toIntExact(cacheAsideUtils.getChatMemoryCount(userId, sessionId));
-            answerQuestion(userId, sessionId, memoryId, question);
+            answerQuestion(userId, sessionId, memoryId, question, ragMode);
 //            if (! tasksMap.containsKey(taskKey)) {
 //                // 2. 定义数据检查任务逻辑
 //                Runnable dataCheckTask = () -> {

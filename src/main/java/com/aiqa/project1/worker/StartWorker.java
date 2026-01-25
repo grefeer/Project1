@@ -145,6 +145,7 @@ public class StartWorker {
 //                .map(document -> document.getDocumentName() + "的摘要:"+ document.getDescription().substring(0,100))
 //                .collect(Collectors.joining("\n"));
         // 建立文档名称-大小Map
+
         Map<String, Long> documentSizeMap = new HashMap<>();
 
         String documentsName = documentList.stream()

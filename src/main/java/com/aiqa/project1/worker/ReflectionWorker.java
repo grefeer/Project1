@@ -45,6 +45,7 @@ public class ReflectionWorker {
 
     @RabbitListener(queuesToDeclare = @Queue(value = "reflection", durable = "true"))
     public void run(State state) {
+
         String chatHistory = redisStoreUtils.getChatMemory(
                         state.getUserId(),
                         state.getSessionId(),

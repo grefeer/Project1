@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,20 +62,35 @@ public class DocsServiceimpl implements DocsService {
     public Result uploadSingleDocument(MultipartFile file, String description, String userId, String sessionId) {
         String abstractStr = null;
         try {
+            // 创建collection
+            milvusSearchUtils.createMilvusCollection(userId);
+
             // 删除旧的
             try {
                 milvusSearchUtils.deleteDocumentEmbeddingsByName(file.getOriginalFilename(), userId);
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            abstractStr = dataProcessUtils.processDocument(userId, Integer.valueOf(sessionId), file);
+//            dataProcessUtils.processDocument(userId, Integer.valueOf(sessionId), file);
+            DocumentTransferDTO dto = new DocumentTransferDTO();
+            dto.setFileName(file.getOriginalFilename());
+            dto.setFileBytes(file.getBytes()); // 读取文件字节（注意大文件需考虑分片，此处按现有逻辑）
+            dto.setUserId(userId);
+            dto.setSessionId(sessionId);
 
-            description = (description == null) ? abstractStr : description;
+            description = (description == null) ? "abstract" : description;
+            Result result = (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData(), sessionId);
+            DocumentUploadData data = (DocumentUploadData) result.getData();
+            dto.setDocumentId(data.getDocumentId());
 
-            return (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData(), sessionId);
+            rabbitTemplate.convertAndSend("TextProcess", "text.divide", dto);
+
+            return result;
         }
         catch (BusinessException e) {
             return new Result(e.getCode(), e.getMessage(), e.getData());
+        } catch (IOException e) {
+            throw new BusinessException(500, e.getMessage(), e);
         }
     }
 
@@ -101,38 +117,27 @@ public class DocsServiceimpl implements DocsService {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
+                DocumentTransferDTO dto = new DocumentTransferDTO();
+                dto.setFileName(multipartFile.getOriginalFilename());
+                dto.setFileBytes(multipartFile.getBytes()); // 读取文件字节（注意大文件需考虑分片，此处按现有逻辑）
+                dto.setUserId(userId);
+                dto.setSessionId(sessionId);
 
-                abstractStr = dataProcessUtils.processDocument(userId, Integer.valueOf(sessionId), multipartFile);
+                Result result_ = (Result) uploadSingleDocumentUnits(multipartFile, "", userId, new DocumentUploadData(), sessionId);
+                DocumentUploadData data_ = (DocumentUploadData) result_.getData();
+                dto.setDocumentId(data_.getDocumentId());
 
-                data.getSuccessList().add(
-                            uploadSingleDocumentUnits(
-                                    multipartFile,
-                                    abstractStr,
-                                    userId, new DocumentResponseData(),
-                                    sessionId
-                            ));
-                    successCount.getAndIncrement();
+                rabbitTemplate.convertAndSend("TextProcess", "text.divide", dto);
+
+                data.getSuccessList().add(result_);
+                successCount.getAndIncrement();
 
             } catch (BusinessException e) {
                 log.error(e.getMessage());
                 data.getFailList().add(e);
+            } catch (IOException e) {
+                throw new BusinessException(500, e.getMessage(), null);
             }
-//            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
-//                try {
-//                    data.getSuccessList().add(
-//                            uploadSingleDocumentUnits(
-//                                    multipartFile,
-//                                    documentName,
-//                                    userId, new DocumentResponseData()
-//                            ));
-//                    successCount.getAndIncrement();
-//                } catch (BusinessException e) {
-//                    log.error(e.getMessage());
-//                    data.getFailList().add(e);
-//                }
-//            }, uploadExecutor);
-//            futures.add(future);
-//        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         }
 
 

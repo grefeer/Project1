@@ -20,6 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/qa")
 public class AIAnswerController {
+    // TODO 改用langgraph4j后无法实时的将问题+思考过程以及答案打印在界面上，可能是/status和langgraph无法同时进行的问题？而且上传任务（嵌入向量的上传）无法实时的看到进度
 
     private final QuestionAnsweringService questionAnsweringService;
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
@@ -45,10 +46,11 @@ public class AIAnswerController {
     ) {
         String question = paramMap.get("question");
         Integer sessionId = Integer.valueOf(paramMap.get("sessionId"));
+//        Integer ragMode = Integer.valueOf(paramMap.get("ragMode"));
         Integer userId = Integer.parseInt(JwtUtils.getUserIdFromToken(token));
-        Map<String, Object> data = new HashMap<>();
 
-        return questionAnsweringService.queryRegister(userId, sessionId, question, data);
+
+        return questionAnsweringService.queryRegister(userId, sessionId, question, null);
     }
 
 

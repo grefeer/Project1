@@ -17,32 +17,31 @@ import java.io.*;
  * 文本提取工具类
  */
 public class TextExtractUtil {
-    // 提取本地文档文本（PDF/Word/Txt）
+    // 原有MultipartFile重载方法（保留兼容）
     public static Document extractLocalDocument(MultipartFile file) throws IOException {
+        return extractLocalDocument(file.getInputStream(), file.getOriginalFilename());
+    }
+
+    // 新增InputStream重载方法（核心修改）
+    public static Document extractLocalDocument(InputStream inputStream, String fileName) throws IOException {
         DocumentParser parser;
-        String fileName = file.getName().toLowerCase();
-        if (
-                fileName.endsWith(".docx") || fileName.endsWith(".doc") ||
-                fileName.endsWith(".ppt") || fileName.endsWith(".pptx") ||
-                fileName.endsWith(".xls") || fileName.endsWith(".xlsx")
-        ) {
+        String fileNameLower = fileName.toLowerCase();
+        if (fileNameLower.endsWith(".docx") || fileNameLower.endsWith(".doc") ||
+                fileNameLower.endsWith(".ppt") || fileNameLower.endsWith(".pptx") ||
+                fileNameLower.endsWith(".xls") || fileNameLower.endsWith(".xlsx")) {
             parser = new ApachePoiDocumentParser();
-        } else if (fileName.endsWith(".txt")) {
+        } else if (fileNameLower.endsWith(".txt")) {
             parser = new TextDocumentParser();
         } else {
-            parser = new ApacheTikaDocumentParser();
+            parser = new ApacheTikaDocumentParser(); // 兼容PDF等其他格式
         }
-
-        InputStream is = file.getInputStream();
-        return parser.parse(is);
+        return parser.parse(inputStream);
     }
 
     // 提取HTML正文（去除标签、广告）
     public static String extractHtmlContent(String htmlContent) {
         org.jsoup.nodes.Document doc = Jsoup.parse(htmlContent);
-        // 移除广告、导航等无关标签（可扩展领域专属规则）
         doc.select("div.ad, nav, footer, script, style").remove();
-        // 提取正文文本
         return doc.body().text().trim();
     }
 }

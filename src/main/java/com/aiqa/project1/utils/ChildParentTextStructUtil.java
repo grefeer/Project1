@@ -1,6 +1,8 @@
 package com.aiqa.project1.utils;
 
+import cn.hutool.core.lang.UUID;
 import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
@@ -11,26 +13,32 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 文本结构化/向量化工具类
  */
 @Component
-public class TextStructUtil {
+public class ChildParentTextStructUtil {
     private final EmbeddingModel onnxMiniLML12V2EmbeddingModel;
     private final OpenAiChatModel douBaoLite;
     private final OllamaChatModel qwen2_5Instruct;
     private final OllamaChatModel gemma3_270m;
 
     // 文本分块配置
-    @Value("${langchain4j.TextConfig.CHUNK_SIZE}")
-    private int CHUNK_SIZE;
-    @Value("${langchain4j.TextConfig.CHUNK_OVERLAP}")
-    private int CHUNK_OVERLAP;
+    @Value("${langchain4j.TextConfig.BIG_CHUNK_SIZE}")
+    private int BIG_CHUNK_SIZE;
+    @Value("${langchain4j.TextConfig.BIG_CHUNK_OVERLAP}")
+    private int BIG_CHUNK_OVERLAP;
+    @Value("${langchain4j.TextConfig.SMALL_CHUNK_SIZE}")
+    private int SMALL_CHUNK_SIZE;
+    @Value("${langchain4j.TextConfig.SMALL_CHUNK_OVERLAP}")
+    private int SMALL_CHUNK_OVERLAP;
 
-    public TextStructUtil(@Qualifier("bgeM3") EmbeddingModel onnxMiniLML12V2EmbeddingModel, OpenAiChatModel douBaoLite, OllamaChatModel qwen2_5Instruct, OllamaChatModel gemma3_270m) {
+    private final String TOKENIZER_PATH = System.getenv("bgeM3Onnx") + "\\tokenizer.json";
+
+    public ChildParentTextStructUtil(@Qualifier("bgeM3") EmbeddingModel onnxMiniLML12V2EmbeddingModel, OpenAiChatModel douBaoLite, OllamaChatModel qwen2_5Instruct, OllamaChatModel gemma3_270m) {
         this.onnxMiniLML12V2EmbeddingModel = onnxMiniLML12V2EmbeddingModel;
         this.douBaoLite = douBaoLite;
         this.qwen2_5Instruct = qwen2_5Instruct;
@@ -39,7 +47,7 @@ public class TextStructUtil {
 
     // 长文本分块（适配大模型/检索）
     public List<TextSegment> splitText(Document document) {
-        return DocumentSplitters.recursive(CHUNK_SIZE, CHUNK_OVERLAP).split(document);
+        return DocumentSplitters.recursive(BIG_CHUNK_SIZE, BIG_CHUNK_OVERLAP).split(document);
     }
 
     // 生成文本向量（适配Milvus）
@@ -160,38 +168,36 @@ public class TextStructUtil {
         return responses;
     }
 
+    /**
+     * 父子分块逻辑
+     * 父块：较大的文本段，用于召回后提供上下文
+     * 子块：较小的文本段，用于生成向量提高检索精度
+     */
+    public List<TextSegment> splitTextParentChild(Document document) {
+        // 1. 先切分出父块 (例如 1000 tokens)
+        List<TextSegment> parentSegments = DocumentSplitters.recursive(
+                BIG_CHUNK_SIZE,
+                BIG_CHUNK_OVERLAP
+        ).split(document);
+        List<TextSegment> allSegments = new ArrayList<>();
 
-//    public String extractDocumentInfo(String text) {
-//        // 简化实现：基于分词+词频，可替换为LangChain4j调用LLM提取
-//        // 示例：return llmClient.extractDocumentInfo(text);
-//
-//        String prompt = "请从以下文本中提取核心关键词，要求如下：\n" +
-//                "1. 关键词为名词或名词短语，优先保留文本中高频出现、语义核心的概念；\n" +
-//                "2. 数量控制在 5-10 个，避免过于宽泛（如 “技术”“方法”）或过于具体的词汇（如具体版本号）；\n" +
-//                "3. 按重要性降序排列，若有同义词汇，合并为最通用的表达；\n" +
-//                "4. 输出格式：仅列出关键词，关键词用英文单引号括起来，并用英文逗号分隔,禁止生成其他无关内容;\n" +
-//                "5. 注意：生成关键字的语言必须和文本的相同，字符必须用英文字符，比如英文文本提取出的关键字必须是英文，中文文本提取出的关键字必须是中文，中英混合则可以是中文或英文" +
-//                "文本内容：" + text +
-//                "比如：文本内容：轻量化智能水杯支持蓝牙连接手机 APP，可实时监测饮水量、水温，内置锂电池续航长达 7 天，还能通过语音提醒用户按时喝水，适配 iOS 和 Android 系统。”\n" +
-//                "输出结果\n" +
-//                "智能水杯,蓝牙,手机 APP,饮水量监测,水温监测,锂电池,续航,语音提醒,iOS 系统,Android 系统";
-//        String responses = "";
-//        try {
-//            responses = deepSeek.chat(prompt);
-//        } catch (Exception e) {
-//            throw new RuntimeException(e);
-//        }
-//        return responses; // 实际需替换为真实逻辑
-//    }
+        for (TextSegment parent : parentSegments) {
+            String parentId = UUID.randomUUID().toString(); // 为父块生成唯一ID
 
-    public static double[] convertFloatToDouble(float[] floatArray) {
-        if (floatArray == null) {
-            return null;
+            // 2. 将每个父块切分为更小的子块 (例如 300 tokens)
+            List<TextSegment> children = DocumentSplitters.recursive(
+                    SMALL_CHUNK_SIZE,
+                    SMALL_CHUNK_OVERLAP
+            ).split(Document.from(parent.text()));
+
+            for (TextSegment child : children) {
+                // 将父块的全文和 ID 存入子块的元数据中
+                Metadata metadata = child.metadata();
+                metadata.put("parent_id", parentId);
+                metadata.put("parent_text", parent.text()); // 关键：存储父块文本以便检索时直接获取
+                allSegments.add(child);
+            }
         }
-        double[] doubleArray = new double[floatArray.length];
-        for (int i = 0; i < floatArray.length; i++) {
-            doubleArray[i] = BigDecimal.valueOf(floatArray[i]).doubleValue();
-        }
-        return doubleArray;
+        return allSegments;
     }
 }
