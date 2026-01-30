@@ -456,14 +456,31 @@ public class RedisStoreUtils {
     /**
      * 读SessionChat（带重试机制）
      * @param userId
-     * @param sessionId
      */
-    public Long removeSessionChat(Integer userId, Integer sessionId) {
+    public Boolean removeSessionChat(Integer userId) {
         String key = SystemConfig.SESSION_SUMMARY.formatted(userId);
-        return redisPoolManager.executeWithRetry(template -> template.opsForHash().delete(key, sessionId.toString()));
+        return redisPoolManager.executeWithRetry(template -> template.delete(key));
     }
 
+    /**
+     * 写文本嵌入状态（带重试机制）
+     * @param userId
+     * @param sessionId
+     */
+    public Boolean setDocumentProcessStatus(String userId, String sessionId, String message, String getDocumentId) {
+        String key = SystemConfig.DOCUMENT_PROCESS_STATUS.formatted(userId, sessionId);
+        return redisPoolManager.executeWithRetry(template -> template.opsForHash().putIfAbsent(key, getDocumentId, message));
+    }
 
+    /**
+     * 文本嵌入状态写为“已完成”（带重试机制）
+     * @param userId
+     * @param sessionId
+     */
+    public Boolean setDocumentProcessStatusFinished(String userId, String sessionId, String getDocumentId) {
+        String key = SystemConfig.DOCUMENT_PROCESS_STATUS.formatted(userId, sessionId);
+        return redisPoolManager.executeWithRetry(template -> template.opsForHash().putIfAbsent(key, getDocumentId, "Finished"));
+    }
 
     public static double toDoubleSeconds(LocalDateTime localDateTime) {
         if (localDateTime == null) {

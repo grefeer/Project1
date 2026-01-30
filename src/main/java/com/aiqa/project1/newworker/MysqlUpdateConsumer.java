@@ -47,7 +47,7 @@ public class MysqlUpdateConsumer {
 
             List<String> chatMemoryList = cacheAsideUtils.getChatMemory(userId, sessionId);
             if (chatMemoryList == null || chatMemoryList.isEmpty()) return;
-            System.out.println("111111111111111111");
+            System.out.println("将redis中缓存的消息保存到mysql中");
             chatMemoryList.forEach(System.out::println);
             // 根据redis更新mysql
             QueryWrapper<UserChatMemory> wrapper = new QueryWrapper<>();

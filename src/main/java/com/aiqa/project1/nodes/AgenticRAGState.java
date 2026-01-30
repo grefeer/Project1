@@ -1,8 +1,10 @@
 package com.aiqa.project1.nodes;
 
+import org.bsc.langgraph4j.internal.node.Node;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
 import org.bsc.langgraph4j.state.Channels;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -51,6 +53,7 @@ public class AgenticRAGState extends AgentState {
                 "reflection", Channels.base(() -> ""), // 反思内容
                 "tool_metadata_list", Channels.base(ArrayList::new)
         ));
+        map.put("thought_process", Channels.base(ArrayList::new));
 
         map.put("retrieval_global_flag", Channels.base(() -> false));
         map.put("retrieval_web_flag", Channels.base(() -> false));
@@ -75,10 +78,47 @@ public class AgenticRAGState extends AgentState {
     public String getDecision() { return this.<String>value("decision").orElse(DecisionType.RETRIEVE.toString()); }
     public String getReflection() { return this.<String>value("reflection").orElse(""); }
     public List<ToolMetaData1> getToolMetadataList() { return this.<List<ToolMetaData1>>value("tool_metadata_list").orElse(new ArrayList<>()); }
+    public List<String> getThoughtProcess() { return this.<List<String>>value("thought_process").orElse(new ArrayList<>()); }
 
     public Boolean getRetrievalGlobalFlag() { return this.<Boolean>value("retrieval_global_flag").orElse(false); }
     public Boolean getRetrievalWebFlag() { return this.<Boolean>value("retrieval_web_flag").orElse(false); }
     public Boolean getLocalRetrievalFlag() { return this.<Boolean>value("local_retrieval_flag").orElse(true); }
     public Boolean getHistoryChatRequirements() { return this.<Boolean>value("history_chat_requirements").orElse(false); }
 
+}
+
+// 带实时回调的节点：捕获思考过程并推送
+class ThoughtNode extends Node<AgenticRAGState> {
+    // 定义进度回调接口（对接界面）
+    public interface ProgressCallback {
+        void onThought(String thought, SseEmitter emitter); // 思考过程回调
+        void onAnswer(String answer, SseEmitter emitter);  // 答案回调
+    }
+
+    private final ProgressCallback callback;
+
+    public ThoughtNode(ProgressCallback callback) {
+        super("123");
+        this.callback = callback;
+    }
+
+//    @Override
+//    public AgenticRAGState execute(AgenticRAGState state) {
+//        // 模拟思考步骤1：解析问题（实时回调）
+//        String thought1 = "正在解析问题：" + state.getQuestion();
+//        state.addThought(thought1);
+//        callback.onThought(thought1); // 推送到界面
+//
+//        // 模拟思考步骤2：检索文档（实时回调）
+//        String thought2 = "检索到文档片段：XXX、YYY";
+//        state.addThought(thought2);
+//        callback.onThought(thought2);
+//
+//        // 模拟生成答案（实时回调）
+//        String answer = "针对「" + state.getQuestion() + "」的答案：XXX";
+//        state.setAnswer(answer);
+//        callback.onAnswer(answer);
+//
+//        return state;
+//    }
 }

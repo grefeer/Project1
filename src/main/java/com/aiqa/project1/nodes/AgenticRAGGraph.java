@@ -18,7 +18,9 @@ import org.bsc.langgraph4j.checkpoint.MemorySaver;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -35,6 +37,7 @@ public class AgenticRAGGraph {
     private final MilvusSearchUtils milvusSearchUtils;
     private final QuerySplitter querySplitter;
     private final AsyncTaskExecutor asyncTaskExecutor;
+    private SseEmitter sseEmitter = null;
 
     // 反思提示模板：评估回答质量，生成反思结论
     private static final String REFLECTION_TEMPLATE = """
@@ -272,7 +275,11 @@ public class AgenticRAGGraph {
             String currentReflection = state.getReflection();
             String chat = douBaoLite.chat(REWRITER_TEMPLATE.formatted(state.getQuery(), currentReflection));
 
-            redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI思考>原问题改写为" + chat);
+            String memory = "<AI思考>原问题改写为" + chat;
+
+            redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), memory);
+            if (sseEmitter != null)
+                sseEmitter.send(SseEmitter.event().name("chat").id(state.getSessionId().toString()).data(memory));
             // 首次进入/反思后需要重新检索 → 保持RETRIEVE；反思后回答合格 → 设为FINISH
             return Map.of(
                     "decision", currentDecision,
@@ -288,13 +295,15 @@ public class AgenticRAGGraph {
                     query,
                     state.getToolMetadataList()
             );
-
+            String memory = "<AI思考>原问题经AI拆解为以下子问题：\n" + subQuery.stream().map(subQuery1 -> "    " + subQuery1.getSub_question()).collect(Collectors.joining("\n"));
             redisStoreUtils.setChatMemory(
                     state.getUserId(),
                     state.getSessionId(),
-                    "<AI思考>原问题经AI拆解为以下子问题：\n" + subQuery.stream().map(subQuery1 -> "    " + subQuery1.getSub_question()).collect(Collectors.joining("\n"))
+                    memory
             );
 
+            if (sseEmitter != null)
+                sseEmitter.send(SseEmitter.event().name("chat").id(state.getSessionId().toString()).data(memory));
             List<Map<String, List<String>>> retrievalInfo = new ArrayList<>();
 
             // 提取文档过滤条件
@@ -337,29 +346,36 @@ public class AgenticRAGGraph {
             List<Map<String, List<String>>> childQuery = state.getRetrievalInfo();
             List<String> subQuery1 = childQuery.stream().map(childQuery1 -> childQuery1.keySet().iterator().next()).toList();
             List<Supplier<SubQuery1>> task_list = new ArrayList<>();
-            try {
-                for (int i = 0; i < childQuery.size(); i++) {
-                    Map<String, List<String>> retrievalInfo = childQuery.get(i);
-                    String subQuery = subQuery1.get(i);
-                    List<String> contentList = retrievalInfo.get(subQuery);
+            for (int i = 0; i < childQuery.size(); i++) {
+                Map<String, List<String>> retrievalInfo = childQuery.get(i);
+                String subQuery = subQuery1.get(i);
+                List<String> contentList = retrievalInfo.get(subQuery);
 
-                    Supplier<SubQuery1> subQuerySupplier = () -> {
-                        SubQuery1 query1 = new SubQuery1(subQuery, "");
-                        String chat = douBaoLite.chat(SUB_QUERY_TEMPLATE.formatted(subQuery, contentList.toString()));
-                        query1.setSub_answer(chat);
-                        return query1;
-                    };
-                    task_list.add(subQuerySupplier);
-                }
-                List<SubQuery1> resultFuture = asyncTaskExecutor.submitAllWithResult(task_list).get();
-                String finalAnswer = generateFinalAnswer(state, resultFuture);
-                return Map.of("answer", finalAnswer);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
+                Supplier<SubQuery1> subQuerySupplier = () -> {
+                    SubQuery1 query1 = new SubQuery1(subQuery, "");
+                    String chat = douBaoLite.chat(SUB_QUERY_TEMPLATE.formatted(subQuery, contentList.toString()));
+                    query1.setSub_answer(chat);
+                    String chatMemory = "<AI思考>针对问题 %s 的回答为：%s".formatted(subQuery, chat);
+                    redisStoreUtils.setChatMemory(
+                            state.getUserId(),
+                            state.getSessionId(),
+                            chatMemory
+                    );
+                    if (sseEmitter != null) {
+                        try {
+                            sseEmitter.send(SseEmitter.event().name("chat").id(state.getSessionId().toString()).data(chatMemory));
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+
+                    return query1;
+                };
+                task_list.add(subQuerySupplier);
             }
-            return Map.of();
+            List<SubQuery1> resultFuture = asyncTaskExecutor.submitAllWithResult(task_list).get();
+            String finalAnswer = generateFinalAnswer(state, resultFuture);
+            return Map.of("answer", finalAnswer);
         });
 
         // 4. 反思节点：评估回答质量，生成反思内容，并更新决策
@@ -374,10 +390,21 @@ public class AgenticRAGGraph {
 
             // 根据反思结果更新决策：反思含"合格"则结束，否则重新检索
             String newDecision = reflection.contains("合格") ? DecisionType.FINISH.toString() : DecisionType.RETRIEVE.toString();
+            String chat;
             if (newDecision.contains(DecisionType.FINISH.toString())) {
-                redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<最终回答>" + answer);
+                chat = "<最终回答>" + answer;
+                redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), chat);
             } else {
-                redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), "<AI思考>" + answer);
+                chat = "<AI思考>" + answer;
+                redisStoreUtils.setChatMemory(state.getUserId(), state.getSessionId(), chat);
+            }
+
+            if (sseEmitter != null) {
+                try {
+                    sseEmitter.send(SseEmitter.event().name("chat").id(state.getSessionId().toString()).data(chat));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
 
             return Map.of(
@@ -385,9 +412,6 @@ public class AgenticRAGGraph {
                     "decision", newDecision
             );
         });
-
-
-
 
         // 构建状态图：实现决策→检索→回答→反思→决策的闭环
         StateGraph<AgenticRAGState> graph = new StateGraph<>(AgenticRAGState.SCHEMA, AgenticRAGState::new)
@@ -420,6 +444,10 @@ public class AgenticRAGGraph {
                 .checkpointSaver(new MemorySaver())
                 .build();
         return graph.compile(compileConfig);
+    }
+
+    public void setSseEmitter(SseEmitter sseEmitter) {
+        this.sseEmitter = sseEmitter;
     }
 
     /**

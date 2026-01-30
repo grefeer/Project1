@@ -22,7 +22,7 @@ public class Document {
     private String fileType;
     private Long currentVersion;
     private Long fileSize;
-    private String status; // AVAILABLE/DELETED
+    private String status; // AVAILABLE/DELETED/NOT_EMBEDDED
     private LocalDateTime uploadTime;
     private LocalDateTime updateTime;
 }

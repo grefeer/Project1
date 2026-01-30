@@ -4,6 +4,7 @@ import com.aiqa.project1.mapper.DocumentMapper;
 import com.aiqa.project1.pojo.document.Document;
 import com.aiqa.project1.pojo.document.DocumentTransferDTO;
 import com.aiqa.project1.utils.DataProcessUtils;
+import com.aiqa.project1.utils.RedisStoreUtils;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
@@ -22,11 +23,13 @@ import java.io.InputStream;
 public class TextConsumer {
     private final DataProcessUtils dataProcessUtils;
     private final DocumentMapper documentMapper;
+    private final RedisStoreUtils redisStoreUtils;
 
 
-    public TextConsumer(DataProcessUtils dataProcessUtils, DocumentMapper documentMapper) {
+    public TextConsumer(DataProcessUtils dataProcessUtils, DocumentMapper documentMapper, RedisStoreUtils redisStoreUtils) {
         this.dataProcessUtils = dataProcessUtils;
         this.documentMapper = documentMapper;
+        this.redisStoreUtils = redisStoreUtils;
     }
 
     // 删除原有的接收MultipartFile/InputStream的方法，新增接收DTO的方法
@@ -48,15 +51,16 @@ public class TextConsumer {
             );
             LambdaUpdateWrapper<Document> updateWrapper = new LambdaUpdateWrapper<>();
             updateWrapper
-                    // 只更新摘要字段（description），最小化更新范围
+                    // 只更新摘要字段（description）和状态，最小化更新范围
                     .set(Document::getDescription, abstractText)
+                    .set(Document::getStatus, "AVAILABLE")
                     // 核心条件：匹配目标文档（document_id有唯一索引，更新极快）
-                    .eq(Document::getDocumentId, dto.getDocumentId())
-                    // 防护：仅更新可用状态的文档，避免误更已删除文档
-                    .eq(Document::getStatus, "AVAILABLE");
+                    .eq(Document::getDocumentId, dto.getDocumentId());
+//                    // 防护：仅更新可用状态的文档，避免误更已删除文档
+//                    .eq(Document::getStatus, "NOT_EMBEDDED");
 
             // 执行更新（返回受影响行数，可根据需要判断是否更新成功）
-            int updateCount = documentMapper.update(null, updateWrapper);
+            int updateCount = documentMapper.update(updateWrapper);
             if (updateCount == 0) {
                 log.warn("更新文档摘要失败，未找到匹配的文档！documentId:{}", dto.getDocumentId());
             } else {

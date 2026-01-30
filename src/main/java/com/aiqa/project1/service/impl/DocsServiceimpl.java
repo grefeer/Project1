@@ -82,7 +82,9 @@ public class DocsServiceimpl implements DocsService {
             Result result = (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData(), sessionId);
             DocumentUploadData data = (DocumentUploadData) result.getData();
             dto.setDocumentId(data.getDocumentId());
-
+            // TODO 将文本转化为嵌入的任务传输给rabbitmq后，后台异步处理该任务（无阻塞），界面无法显示是否已经完成嵌入操作，所以需要在document的状态（STATUS）在嵌入操作前改为NOT_EMBEDDED（无嵌入）
+            //  上传的文件（多个文件）分别进行嵌入操作后，修改文件的状态为（AVAILABLE）
+            //  以上内容已完成，需要在前端展示文件状态（NOT_EMBEDDED，AVAILABLE）
             rabbitTemplate.convertAndSend("TextProcess", "text.divide", dto);
 
             return result;
@@ -273,7 +275,7 @@ public class DocsServiceimpl implements DocsService {
             document.setUserId(userId);
             document.setFileSize(file.getSize());
             document.setUpdateTime(LocalDateTime.now());
-            document.setStatus("AVAILABLE");
+            document.setStatus("NOT_EMBEDDED");
 
             if (insertFlag) {
                 documentMapper.insert(document);
@@ -434,7 +436,7 @@ public class DocsServiceimpl implements DocsService {
             }
             List<DocumentUploadData> documentUploadDataList = new ArrayList<>();
             documentList.stream()
-                    .filter(document -> document.getStatus().equals("AVAILABLE"))
+                    .filter(document -> document.getStatus().equals("AVAILABLE") || document.getStatus().equals("NOT_EMBEDDED") )
                     .forEach(document -> documentUploadDataList.add(UserUtils.copyDuplicateFieldsFromA2B(document, new DocumentUploadData())));
             data.setList(documentUploadDataList);
             result.setMessage("查询成功");
