@@ -41,6 +41,8 @@ public class DocsServiceimpl implements DocsService {
     private DataProcessUtils dataProcessUtils;
     @Autowired
     private MilvusSearchUtils milvusSearchUtils;
+    @Autowired
+    private MinIOStoreUtils minIOStoreUtils;
 
     public DocsServiceimpl(DocumentMapper documentMapper, TencentCOSUtil tencentCOSUtil, SnowFlakeUtil snowFlakeUtil, DocumentVersionMapper versionMapper, RabbitTemplate rabbitTemplate) {
         this.documentMapper = documentMapper;
@@ -262,9 +264,10 @@ public class DocsServiceimpl implements DocsService {
             // 核心：将集合转为纯逗号分隔字符串（无重复、无空格）
             String finalSessionIds = String.join(",", sessionIdSet);
             document.setSessionId(finalSessionIds);
+            // 将其保存到本地
+            String ossPath = minIOStoreUtils.getOssPath(userId, documentId, documentName, document.getCurrentVersion());
+            String previewUrl = minIOStoreUtils.uploadAndGetPublicUrl("data", ossPath, file);
 
-            String ossPath = tencentCOSUtil.getOssPath(userId, documentId, documentName, document.getCurrentVersion());
-            String previewUrl = tencentCOSUtil.upLoadFile(file, ossPath);
             if (previewUrl == null) {
                 throw new BusinessException(500, "COS文件上传失败，事务回滚", null);
             }
@@ -290,8 +293,9 @@ public class DocsServiceimpl implements DocsService {
             version.setUploadTime(LocalDateTime.now());
             versionMapper.insert(version);
 
-            data = UserUtils.copyDuplicateFieldsFromA2B(version, data);
-            data = UserUtils.copyDuplicateFieldsFromA2B(document, data);
+            UserUtils.copyDuplicateFieldsFromA2B(version, data);
+            UserUtils.copyDuplicateFieldsFromA2B(document, data);
+
             res.setData(data);
             res.setCode(200);
             res.setMessage("文档上传成功");
@@ -369,16 +373,17 @@ public class DocsServiceimpl implements DocsService {
             Document document = (Document) result.getData();
             if (document == null)
                 return result;
-
-            String key = "docs/" + tencentCOSUtil.getOssPath(
+            // 从本地下载
+            String key = minIOStoreUtils.getOssPath(
                     authInfo.getUserId(),
                     documentId,
-                    document.getDocumentName(),
+                    "",
                     (version == null) ? document.getCurrentVersion() : version
             );
-//            response.setHeader("filename", document.getDocumentName());
+            response.setHeader("filename", document.getDocumentName());
+            minIOStoreUtils.download("data", key, document.getDocumentName(), response);
+//            tencentCOSUtil.downloadFileByStream(key, document.getDocumentName(), response);
 
-            tencentCOSUtil.downloadFileByStream(key, document.getDocumentName(), response);
             result.setCode(200);
             result.setMessage("下载成功");
             result.setData(null);

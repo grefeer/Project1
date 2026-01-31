@@ -71,6 +71,9 @@ qclode:
     bucketName: "ai-docs-qa-platform-1390443137"
     bucketAddr: "ap-beijing"
 
+minio:
+  endpoint: http://localhost:9000
+
 snowflake:
   datacenterId: 1
   machineId: 1

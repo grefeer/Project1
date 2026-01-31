@@ -112,13 +112,13 @@ public class DocsController {
     }
 
     @GetMapping("/download")
-    public Result downloadDocument(
+    public void downloadDocument(
             @RequestParam("documentId") String documentId,
             @RequestParam(name = "keyword", required = false) Long version,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        return docsService.downloadSingleDocument(documentId, version, request, response);
+        docsService.downloadSingleDocument(documentId, version, request, response);
     }
 
     @DeleteMapping("/delete/{documentId}")
