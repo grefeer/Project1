@@ -11,6 +11,8 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.minio.MinioClient;
+import io.minio.RemoveObjectArgs;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -20,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -43,6 +47,8 @@ public class DocsServiceimpl implements DocsService {
     private MilvusSearchUtils milvusSearchUtils;
     @Autowired
     private MinIOStoreUtils minIOStoreUtils;
+    @Autowired
+    private MinioClient minioClient;
 
     public DocsServiceimpl(DocumentMapper documentMapper, TencentCOSUtil tencentCOSUtil, SnowFlakeUtil snowFlakeUtil, DocumentVersionMapper versionMapper, RabbitTemplate rabbitTemplate) {
         this.documentMapper = documentMapper;
@@ -212,7 +218,7 @@ public class DocsServiceimpl implements DocsService {
     @Transactional(rollbackFor = Exception.class, propagation = Propagation.NESTED)
     public Object uploadSingleDocumentUnits(MultipartFile file, String description, String userId, Object data, String sessionId) {
         Result res = new Result();
-
+        String ossPath = null ;
         String documentName = file.getOriginalFilename();
         String fileType = documentName.substring(documentName.lastIndexOf("."));
 
@@ -265,7 +271,7 @@ public class DocsServiceimpl implements DocsService {
             String finalSessionIds = String.join(",", sessionIdSet);
             document.setSessionId(finalSessionIds);
             // 将其保存到本地
-            String ossPath = minIOStoreUtils.getOssPath(userId, documentId, documentName, document.getCurrentVersion());
+            ossPath = minIOStoreUtils.getOssPath(userId, documentId, documentName, document.getCurrentVersion());
             String previewUrl = minIOStoreUtils.uploadAndGetPublicUrl("data", ossPath, file);
 
             if (previewUrl == null) {
@@ -300,7 +306,21 @@ public class DocsServiceimpl implements DocsService {
             res.setCode(200);
             res.setMessage("文档上传成功");
         } catch (Exception e) {
-            throw new BusinessException(500, "文档上传失败", e);
+            // 捕获异常后，手动删除已上传的MinIO文件
+            try {
+                if (ossPath != null) {
+                    minioClient.removeObject(
+                            RemoveObjectArgs.builder()
+                                    .bucket("data")
+                                    .object(ossPath)
+                                    .build());
+                }
+            } catch (Exception ex) {
+                // 记录文件删除失败的日志，便于后续人工处理
+                System.err.println("回滚MinIO文件失败：" + ex.getMessage());
+            }
+            // 重新抛出异常，触发数据库事务回滚
+            throw new RuntimeException("操作失败，已回滚文件和数据库操作", e);
         }
 
         log.info(res.getMessage());

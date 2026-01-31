@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
 
@@ -26,10 +27,13 @@ public class UserInterceptor implements HandlerInterceptor {
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
+        String token;
 
-        //获取 token
-        String token = request.getHeader("Authorization");
-//        log.info(token);
+        token = request.getParameter("token");
+        if (token == null || token.isEmpty()) {
+            token = request.getHeader("Authorization");
+        }
+
         // 无 token
         if (token == null || token.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
