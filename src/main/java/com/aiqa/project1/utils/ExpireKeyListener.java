@@ -21,7 +21,7 @@ public class ExpireKeyListener {
             // 提取关联的用户ID
             String userId = expiredKey.replace("chatMemory:userId:", "").split(":sessionId")[0];
             String sessionId = expiredKey.replace("chatMemory:userId:", "").split(":sessionId")[1];
-            // TODO 需要更精细的删除策略
+            // 需要更精细的删除策略
 //            redisStoreUtils.deleteActivateSessionIdBy(Integer.valueOf(userId));
 
             System.out.println("键 " + expiredKey + " 过期");

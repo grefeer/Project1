@@ -82,9 +82,7 @@ public class DocsServiceimpl implements DocsService {
             Result result = (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData(), sessionId);
             DocumentUploadData data = (DocumentUploadData) result.getData();
             dto.setDocumentId(data.getDocumentId());
-            // TODO 将文本转化为嵌入的任务传输给rabbitmq后，后台异步处理该任务（无阻塞），界面无法显示是否已经完成嵌入操作，所以需要在document的状态（STATUS）在嵌入操作前改为NOT_EMBEDDED（无嵌入）
-            //  上传的文件（多个文件）分别进行嵌入操作后，修改文件的状态为（AVAILABLE）
-            //  以上内容已完成，需要在前端展示文件状态（NOT_EMBEDDED，AVAILABLE）
+
             rabbitTemplate.convertAndSend("TextProcess", "text.divide", dto);
 
             return result;
@@ -430,7 +428,7 @@ public class DocsServiceimpl implements DocsService {
             List<Document> documentList = documentPage.getRecords();
 
             long total = documentPage.getTotal();
-            System.out.println("Total users (age > 25): " + total);
+            System.out.println("Total documents: " + total);
             for (Document document : documentList) {
                 System.out.println("User: " + document);
             }
