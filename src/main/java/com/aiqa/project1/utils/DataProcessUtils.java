@@ -20,10 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,6 +45,7 @@ public class DataProcessUtils {
     private final AsyncTaskExecutor asyncTaskExecutor;
     private final Gson gson;
     private final ChildParentTextStructUtil childParentTextStructUtil;
+    private final MilvusSearchUtils1 milvusSearchUtils1;
 
     @Value("${milvus.collection-name}")
     private String collectionName;
@@ -57,19 +55,20 @@ public class DataProcessUtils {
             TextStructUtil textStructUtil,
             MilvusSearchUtils milvusSearchUtils,
             MilvusClientV2 milvusClient,
-            AsyncTaskExecutor asyncTaskExecutor, ChildParentTextStructUtil childParentTextStructUtil) {
+            AsyncTaskExecutor asyncTaskExecutor, ChildParentTextStructUtil childParentTextStructUtil, MilvusSearchUtils1 milvusSearchUtils1) {
         this.textStructUtil = textStructUtil;
         this.milvusSearchUtils = milvusSearchUtils;
         this.milvusClient = milvusClient;
         this.asyncTaskExecutor = asyncTaskExecutor;
         this.gson = new Gson();
         this.childParentTextStructUtil = childParentTextStructUtil;
+        this.milvusSearchUtils1 = milvusSearchUtils1;
     }
 
 
-    public String processDocument(String userId, Integer sessionId, MultipartFile file) {
+    public String processDocument(String userId, String tagName, MultipartFile file) {
         try {
-            return processDocument(userId, sessionId, file.getInputStream(), file.getOriginalFilename());
+            return processDocument(userId, file.getInputStream(), file.getOriginalFilename(), tagName);
         } catch (IOException e) {
             throw new BusinessException(500, e.getMessage(), null);
         }
@@ -99,6 +98,37 @@ public class DataProcessUtils {
 
             // 5. 存储到Milvus向量库
             storeToVectorDatabase(userId, sessionId, vectorizedSegments, metadata, fileName);
+
+            return metadata.getAbstractText();
+        } catch (Exception e) {
+            log.error("文档处理失败: {}", fileName, e);
+            throw new RuntimeException("文档处理失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 处理文档数据的主流程（核心修改：替换为InputStream输入）
+     * @param userId 用户ID
+     * @param inputStream 文档IO流
+     * @param fileName 文件名（含后缀，用于解析文档类型）
+     * @return 文档摘要
+     */
+    public String processDocument(String userId, InputStream inputStream, String fileName, String tagName) {
+        try {
+            // 1. 文档提取和清洗（适配InputStream）
+            String cleanContent = extractAndCleanText(inputStream, fileName);
+
+            // 2. 父子分块（逻辑完全复用）
+            List<TextSegment> segments = splitDocument(cleanContent);
+
+            // 3. 提取元数据
+            DocumentMetadata metadata = extractMetadata(segments, fileName);
+
+            // 4. 向量化处理
+            Map<Embedding, TextSegment> vectorizedSegments = vectorizeSegments(segments);
+
+            // 5. 存储到Milvus向量库
+            storeToVectorDatabase(userId, vectorizedSegments, metadata, fileName, tagName);
 
             return metadata.getAbstractText();
         } catch (Exception e) {
@@ -290,6 +320,39 @@ public class DataProcessUtils {
     }
 
     /**
+     * 存储到Milvus向量数据库（原有逻辑复用）
+     */
+    private void storeToVectorDatabase(
+            String userId,
+            Map<Embedding, TextSegment> vectorizedSegment,
+            DocumentMetadata metadata,
+            String filename,
+            String tagName
+    ) {
+        try {
+            // 创建Milvus集合
+            milvusSearchUtils1.createMilvusCollection();
+//            milvusSearchUtils1.createPartition(tagName);
+
+            // 准备插入数据（包含父子块信息）
+            List<JsonObject> data = prepareInsertData(vectorizedSegment, metadata, filename, tagName, Integer.valueOf(userId));
+
+            // 执行插入
+            InsertReq insertReq = InsertReq.builder()
+                    .collectionName(collectionName)
+//                    .partitionName(tagName)
+                    .data(data)
+                    .build();
+
+            milvusClient.insert(insertReq);
+            log.info("向量库写入完成: {}, 共{}个文本段", filename, data.size());
+        } catch (Exception e) {
+            log.error("向量库写入失败: {}", filename, e);
+            throw new RuntimeException("向量库写入失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * 准备Milvus插入数据（包含父子块元信息）
      */
     private List<JsonObject> prepareInsertData(
@@ -319,6 +382,57 @@ public class DataProcessUtils {
             }
             if (parentId != null) {
                 row.addProperty("parent_id", parentId);
+            }
+
+            // 文档元数据
+            if (metadata.getAuthor() != null) {
+                row.addProperty("author", metadata.getAuthor());
+            }
+            if (metadata.getTitle() != null) {
+                row.addProperty("title", metadata.getTitle());
+            }
+            if (metadata.getDate() != null) {
+                row.addProperty("timestamp", metadata.getDate());
+            }
+            data.add(row);
+        }
+        return data;
+    }
+
+    /**
+     * 准备Milvus插入数据（包含父子块元信息）
+     */
+    private List<JsonObject> prepareInsertData(
+            Map<Embedding, TextSegment> vectorizedSegments,
+            DocumentMetadata metadata,
+            String filename,
+            String tagName,
+            Integer userId
+    ) {
+        List<JsonObject> data = new ArrayList<>();
+
+        for (Map.Entry<Embedding, TextSegment> entry : vectorizedSegments.entrySet()) {
+            JsonObject row = new JsonObject();
+            TextSegment segment = entry.getValue();
+
+            // 基础文本字段
+            row.addProperty("text", segment.text());
+            row.add("text_dense", gson.toJsonTree(entry.getKey().vector()));
+            row.addProperty("come_from", filename);
+            row.addProperty("fileName", filename);
+            row.addProperty("user_id", userId);
+
+            // 父子块关联信息（核心）
+            String parentText = segment.metadata().getString("parent_text");
+            String parentId = segment.metadata().getString("parent_id");
+            if (parentText != null) {
+                row.addProperty("parent_text", parentText);
+            }
+            if (parentId != null) {
+                row.addProperty("parent_id", parentId);
+            }
+            if (tagName != null) {
+                row.addProperty("tag_name", tagName);
             }
 
             // 文档元数据

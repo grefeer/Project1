@@ -1,10 +1,9 @@
 package com.aiqa.project1.nodes;
 
 import com.aiqa.project1.config.SystemConfig;
-import com.aiqa.project1.utils.AsyncTaskExecutor;
-import com.aiqa.project1.utils.MilvusSearchUtils;
-import com.aiqa.project1.utils.RedisStoreUtils;
-import com.aiqa.project1.utils.RegexValidate;
+import com.aiqa.project1.pojo.tag.OrganizationTag;
+import com.aiqa.project1.service.impl.SpecialTagService;
+import com.aiqa.project1.utils.*;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import io.milvus.v2.service.vector.response.SearchResp;
 import org.bsc.langgraph4j.CompileConfig;
@@ -32,11 +31,12 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 @Component
 public class SubQueryRAGGraph {
     private final OpenAiChatModel douBaoLite;
-    private final MilvusSearchUtils milvusSearchUtils;
+    private final MilvusSearchUtils1 milvusSearchUtils1;
     private final QuerySplitter querySplitter;
     private final AsyncTaskExecutor asyncTaskExecutor;
     private final RedisStoreUtils redisStoreUtils;
     private final RabbitTemplate rabbitTemplate;
+    private final SpecialTagService specialTagService;
 
     String subQueryTemplate = """
                 以下是子查询的内容：
@@ -49,13 +49,14 @@ public class SubQueryRAGGraph {
                 """;
 
 
-    public SubQueryRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils milvusSearchUtils, QuerySplitter querySplitter, AsyncTaskExecutor asyncTaskExecutor, RedisStoreUtils redisStoreUtils, RabbitTemplate rabbitTemplate) {
+    public SubQueryRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils1 milvusSearchUtils1, QuerySplitter querySplitter, AsyncTaskExecutor asyncTaskExecutor, RedisStoreUtils redisStoreUtils, RabbitTemplate rabbitTemplate, SpecialTagService specialTagService) {
         this.douBaoLite = douBaoLite;
-        this.milvusSearchUtils = milvusSearchUtils;
+        this.milvusSearchUtils1 = milvusSearchUtils1;
         this.querySplitter = querySplitter;
         this.asyncTaskExecutor = asyncTaskExecutor;
         this.redisStoreUtils = redisStoreUtils;
         this.rabbitTemplate = rabbitTemplate;
+        this.specialTagService = specialTagService;
     }
 
 
@@ -84,14 +85,25 @@ public class SubQueryRAGGraph {
             }
             System.out.println(filterExpr);
             try {
+                List<OrganizationTag> tagList = specialTagService.getAllTagsByUserId_(state.getUserId());
+
+                List<String> partitionNames = new ArrayList<>(tagList.stream()
+                        .map(OrganizationTag::getTagName)
+                        .toList());
+                // 去除个人标签
+                partitionNames.remove("PERSONAL");
+
                 subQuery.forEach(subQuery1 ->{
-                    SearchResp searchResp = milvusSearchUtils.hybridSearch(
-                            state.getQuery(),
-                            state.getQuery(),
-                            state.getUserId(),  state.getSessionId(),
-                            10, 60, filterExpr
+                    // 从所在组织的文档中检索,如果标签包含ADMIN，全文档检索
+                    SearchResp searchResp = milvusSearchUtils1.hybridSearch(
+                            subQuery1.getSub_question(),
+                            subQuery1.getSub_question(),
+                            state.getUserId(),
+                            partitionNames,
+                            7, 60, filterExpr
                     );
-                    List<String> contentList = MilvusSearchUtils.getContentsFromSearchResp(searchResp).stream().map(Objects::toString).toList();
+                    List<String> contentList = new ArrayList<>(MilvusSearchUtils.getContentsFromSearchResp(searchResp)
+                            .stream().map(Objects::toString).toList());
                     retrievalInfo.add(Map.of(subQuery1.getSub_question(), contentList));
                 });
             } catch (Exception e) {

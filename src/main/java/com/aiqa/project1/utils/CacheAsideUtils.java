@@ -38,7 +38,7 @@ public class CacheAsideUtils {
      */
     public Boolean setSessionChat(Integer userId, Integer sessionId, String message) {
         try {
-            sessionChatMapper.insertOrUpdate(new SessionChat(null, userId, sessionId, message));
+            sessionChatMapper.insertOrUpdate(new SessionChat(null, userId, sessionId, message, false));
             redisStoreUtils.removeSessionChat(userId);
             return true;
         } catch (Exception e) {

@@ -63,11 +63,8 @@ public class SseEmitterManager {
      * @param documentStatus 要推送的文档状态（更新后的状态）
      */
     public void sendDocumentStatus(String clientId, Map<String, String> documentStatus) {
-//        sseEmitterMap.forEach((k, v) -> System.out.println(k + ":" + v));
-//        if (sseEmitterMap.containsKey(clientId)) {
-//            System.out.println("11223");
-        SseEmitter emitter = sseEmitterMap.get(clientId);
         try {
+            SseEmitter emitter = sseEmitterMap.get(clientId);
             // 发送SSE事件，指定事件类型为"documentStatus"，方便前端区分
             emitter.send(SseEmitter.event()
                     .name("documentStatus")

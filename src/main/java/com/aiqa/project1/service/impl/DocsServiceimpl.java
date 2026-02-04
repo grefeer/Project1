@@ -2,9 +2,13 @@ package com.aiqa.project1.service.impl;
 
 import com.aiqa.project1.controller.UserController;
 import com.aiqa.project1.mapper.DocumentMapper;
+import com.aiqa.project1.mapper.DocumentTagMapper;
 import com.aiqa.project1.mapper.DocumentVersionMapper;
+import com.aiqa.project1.mapper.SpecialTagMapper;
 import com.aiqa.project1.pojo.*;
 import com.aiqa.project1.pojo.document.*;
+import com.aiqa.project1.pojo.tag.DocumentTag;
+import com.aiqa.project1.pojo.tag.OrganizationTag;
 import com.aiqa.project1.service.DocsService;
 import com.aiqa.project1.utils.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -15,6 +19,7 @@ import io.minio.MinioClient;
 import io.minio.RemoveObjectArgs;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -33,26 +38,28 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
+@Slf4j
 public class DocsServiceimpl implements DocsService {
     private final DocumentMapper documentMapper;
-    private final TencentCOSUtil tencentCOSUtil;
     private final SnowFlakeUtil snowFlakeUtil;
     private final DocumentVersionMapper versionMapper;
     private final RabbitTemplate rabbitTemplate;
 
-    private static final Logger log = LoggerFactory.getLogger(UserController.class);
     @Autowired
-    private DataProcessUtils dataProcessUtils;
-    @Autowired
-    private MilvusSearchUtils milvusSearchUtils;
+    private MilvusSearchUtils1 milvusSearchUtils1;
     @Autowired
     private MinIOStoreUtils minIOStoreUtils;
     @Autowired
     private MinioClient minioClient;
+    @Autowired
+    private DocumentTagMapper documentTagMapper;
+    @Autowired
+    private SpecialTagMapper specialTagMapper;
+    @Autowired
+    private SpecialTagService specialTagService;
 
     public DocsServiceimpl(DocumentMapper documentMapper, TencentCOSUtil tencentCOSUtil, SnowFlakeUtil snowFlakeUtil, DocumentVersionMapper versionMapper, RabbitTemplate rabbitTemplate) {
         this.documentMapper = documentMapper;
-        this.tencentCOSUtil = tencentCOSUtil;
         this.snowFlakeUtil = snowFlakeUtil;
         this.versionMapper = versionMapper;
         this.rabbitTemplate = rabbitTemplate;
@@ -67,15 +74,15 @@ public class DocsServiceimpl implements DocsService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result uploadSingleDocument(MultipartFile file, String description, String userId, String sessionId) {
+    public Result uploadSingleDocument(MultipartFile file, String description, Integer tagId, String userId, String sessionId) {
         String abstractStr = null;
         try {
             // 创建collection
-            milvusSearchUtils.createMilvusCollection(userId);
+            milvusSearchUtils1.createMilvusCollection();
 
             // 删除旧的
             try {
-                milvusSearchUtils.deleteDocumentEmbeddingsByName(file.getOriginalFilename(), userId);
+                milvusSearchUtils1.deleteDocumentEmbeddingsByName(file.getOriginalFilename());
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -87,10 +94,10 @@ public class DocsServiceimpl implements DocsService {
             dto.setSessionId(sessionId);
 
             description = (description == null) ? "abstract" : description;
-            Result result = (Result) uploadSingleDocumentUnits(file, description, userId, new DocumentUploadData(), sessionId);
+            Result result = (Result) uploadSingleDocumentUnits(file, description, tagId, userId, sessionId);
             DocumentUploadData data = (DocumentUploadData) result.getData();
             dto.setDocumentId(data.getDocumentId());
-
+            dto.setTagName(((DocumentUploadData) result.getData()).getTagType());
             rabbitTemplate.convertAndSend("TextProcess", "text.divide", dto);
 
             return result;
@@ -104,7 +111,7 @@ public class DocsServiceimpl implements DocsService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Result uploadMultiDocuments(List<MultipartFile> files, String userId, String sessionId) {
+    public Result uploadMultiDocuments(List<MultipartFile> files, String userId, String sessionId, Integer tagId) {
         Result result = new Result();
         Boolean deleteFinishedFlag = false;
         DocumentInfoList data = new DocumentInfoList();
@@ -121,7 +128,7 @@ public class DocsServiceimpl implements DocsService {
             try {
                 // 删除旧的
                 try {
-                    milvusSearchUtils.deleteDocumentEmbeddingsByName(multipartFile.getOriginalFilename(), userId);
+                    milvusSearchUtils1.deleteDocumentEmbeddingsByName(multipartFile.getOriginalFilename());
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -131,9 +138,10 @@ public class DocsServiceimpl implements DocsService {
                 dto.setUserId(userId);
                 dto.setSessionId(sessionId);
 
-                Result result_ = (Result) uploadSingleDocumentUnits(multipartFile, "", userId, new DocumentUploadData(), sessionId);
+                Result result_ = (Result) uploadSingleDocumentUnits(multipartFile, "", tagId, userId, sessionId);
                 DocumentUploadData data_ = (DocumentUploadData) result_.getData();
                 dto.setDocumentId(data_.getDocumentId());
+                dto.setTagName(((DocumentUploadData) result.getData()).getTagType());
 
                 rabbitTemplate.convertAndSend("TextProcess", "text.divide", dto);
 
@@ -160,7 +168,6 @@ public class DocsServiceimpl implements DocsService {
     @Override
     public Result getSingleDocument(String documentId, AuthInfo authInfo, Long version) {
         Result result = new Result();
-
 
         try {
             // 鉴权
@@ -216,14 +223,26 @@ public class DocsServiceimpl implements DocsService {
 
 
     @Transactional(rollbackFor = Exception.class, propagation = Propagation.NESTED)
-    public Object uploadSingleDocumentUnits(MultipartFile file, String description, String userId, Object data, String sessionId) {
+    public Object uploadSingleDocumentUnits(MultipartFile file, String description, Integer tagId, String userId, String sessionId) {
         Result res = new Result();
         String ossPath = null ;
-        String documentName = file.getOriginalFilename();
-        String fileType = documentName.substring(documentName.lastIndexOf("."));
-
+        String documentName;
+        String fileType;
+        DocumentUploadData data = new DocumentUploadData();
 
         try {
+            documentName = file.getOriginalFilename();
+            fileType = documentName.substring(documentName.lastIndexOf("."));
+            QueryWrapper<OrganizationTag> tagQueryWrapper = new QueryWrapper<>();
+            tagQueryWrapper.eq("tag_id", tagId);
+            OrganizationTag organizationTag = specialTagMapper.selectOne(tagQueryWrapper);
+
+            System.out.println(organizationTag);
+
+            if (organizationTag == null) {
+                return Result.error("标签ID错误", null);
+            }
+
             QueryWrapper<Document> wrapper = new QueryWrapper<>();
             wrapper.eq("document_name", documentName).eq("user_id", userId);
             Document document = documentMapper.selectOne(wrapper);
@@ -284,11 +303,21 @@ public class DocsServiceimpl implements DocsService {
             document.setUpdateTime(LocalDateTime.now());
             document.setStatus("NOT_EMBEDDED");
 
+            // document和tag绑定
+            document.setTagType(organizationTag.getTagName());
+            DocumentTag entity = new DocumentTag();
+            entity.setDocumentId(documentId);
+            entity.setTagId(tagId);
+
+            System.out.println(document);
+
             if (insertFlag) {
                 documentMapper.insert(document);
             } else {
                 documentMapper.update(document, wrapper);
             }
+
+            documentTagMapper.insert(entity);
 
             DocumentVersion version = new DocumentVersion();
             version.setDocumentId(documentId);
@@ -301,6 +330,8 @@ public class DocsServiceimpl implements DocsService {
 
             UserUtils.copyDuplicateFieldsFromA2B(version, data);
             UserUtils.copyDuplicateFieldsFromA2B(document, data);
+
+            System.out.println("1111\n" + data.getTagType());
 
             res.setData(data);
             res.setCode(200);
@@ -329,6 +360,16 @@ public class DocsServiceimpl implements DocsService {
         return res;
     }
 
+    private boolean authIfUserHaveTag(Integer tagId, String userId) {
+        List<OrganizationTag> data1 = specialTagService.getAllTagsByUserId_(Integer.valueOf(userId));
+        for (OrganizationTag organizationTag : data1) {
+            if(Objects.equals(tagId, organizationTag.getTagId())) {
+               return true;
+            }
+        }
+        return false;
+    }
+
     @Transactional(rollbackFor = Exception.class)
     @Override
     public Result deleteSingleDocument(String documentId, HttpServletRequest request) {
@@ -345,6 +386,7 @@ public class DocsServiceimpl implements DocsService {
             UpdateWrapper<Document> wrapperVersion = new UpdateWrapper<>();
             wrapperVersion.eq("document_id", documentId).eq("user_id", authInfo.getUserId()).set("status", "DELETED").set("session_id", "");
             documentMapper.update(document, wrapperVersion);
+            documentTagMapper.delete(new QueryWrapper<DocumentTag>().eq("document_id", documentId));
 
             // 向rabbitmq发送删除请求
             rabbitTemplate.convertAndSend(
@@ -436,7 +478,14 @@ public class DocsServiceimpl implements DocsService {
 
             QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
             if (! authInfo.getRole().equals("ADMIN")) {
-                queryWrapper.eq("user_id", userId);
+                // 获取user的所有tag
+                List<OrganizationTag> tagList = specialTagService.getAllTagsByUserId_(Integer.valueOf(userId));
+                List<String> tagNameList = tagList.stream().map(OrganizationTag::getTagName).toList();
+                // 过滤出符合标签的文档
+                queryWrapper
+                        .eq("user_id", userId)
+                        .or()
+                        .in("tag_type", tagNameList);
             }
             queryWrapper.like("document_name", keyword);
 

@@ -1,5 +1,6 @@
 package com.aiqa.project1.nodes;
 
+import com.aiqa.project1.pojo.tag.OrganizationTag;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.state.Channel;
 import org.bsc.langgraph4j.state.Channels;
@@ -24,6 +25,8 @@ public class SubQueryRAGState extends AgentState {
                 "answer", Channels.base(() -> ""),
                 "tool_metadata_list", Channels.base(ArrayList::new)
         ));
+        map.put("tags", Channels.base(ArrayList::new));
+
         SCHEMA = map;
     }
 
@@ -41,5 +44,6 @@ public class SubQueryRAGState extends AgentState {
     public List<Map<String, List<String>>> getRetrievalInfo() { return this.<List<Map<String, List<String>>>>value("retrieval_info").orElse(new ArrayList<>()); }
     public List<ToolMetaData1> getToolMetadataList() { return this.<List<ToolMetaData1>>value("tool_metadata_list").orElse(new ArrayList<>()); }
     public String getAnswer() { return this.<String>value("answer").orElse(""); }
+    public List<OrganizationTag> getTags() { return this.<List<OrganizationTag>>value("tags").orElse(new ArrayList<>()); }
 
 }

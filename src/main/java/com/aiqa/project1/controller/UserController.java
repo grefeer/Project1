@@ -156,5 +156,15 @@ public class UserController {
         }
         return resp;
     }
+
+    @DeleteMapping("/{userId}")
+    public Result deleteUserByUserId(@PathVariable Integer userId) {
+        System.out.printf("删除用户：%s 成功%n", userId);
+        Boolean deleted = userService.deleteUserByUserId(userId);
+        if (deleted) {
+            return Result.success("删除用户：%s 成功".formatted(userId),null);
+        }
+        return Result.error("删除用户：%s 失败".formatted(userId),null);
+    }
 }
 

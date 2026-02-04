@@ -21,7 +21,7 @@ public interface DocsService {
      * @return
      * @throws BusinessException
      */
-    Result uploadSingleDocument(MultipartFile file, String description, String userId, String sessionId) throws BusinessException;
+    Result uploadSingleDocument(MultipartFile file, String description, Integer tagId, String userId, String sessionId) throws BusinessException;
 
 
     /**
@@ -32,7 +32,7 @@ public interface DocsService {
      * @return
      * @throws BusinessException
      */
-    Result uploadMultiDocuments(List<MultipartFile> files, String userId, String sessionId) throws BusinessException;
+    Result uploadMultiDocuments(List<MultipartFile> files, String userId, String sessionId, Integer tagId) throws BusinessException;
 
     /**
      * 查询单个文档信息

@@ -1,12 +1,14 @@
 package com.aiqa.project1.pojo.user;
 
 
+import java.util.List;
+
 public class RegisterDataUser extends UserResponseData {
 
     private String createdTime;
 
-    public RegisterDataUser(Integer userId, String username, String role, String createTime) {
-        super(userId, username, role);
+    public RegisterDataUser(Integer userId, String username, String role, String createTime, List<String> tags) {
+        super(userId, username, role, tags);
         this.createdTime = createTime;
     }
 

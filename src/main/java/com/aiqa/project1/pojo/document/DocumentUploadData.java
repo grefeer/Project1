@@ -14,8 +14,9 @@ public class DocumentUploadData extends DocumentResponseData{
     private String fileType;
     private String previewUrl;
     private String status = "NOT_EMBEDDED";
+    private String tagType = "PERSONAL";
 
-    public DocumentUploadData(String documentId, String documentName, String ossPath, Long fileSize, String fileType, Long version, LocalDateTime uploadTime, String previewUrl, String status) {
+    public DocumentUploadData(String documentId, String documentName, String ossPath, Long fileSize, String fileType, Long version, LocalDateTime uploadTime, String previewUrl, String status, String tagType) {
         super(documentId, documentName, version, uploadTime);
 
         this.ossPath = ossPath;
@@ -23,6 +24,7 @@ public class DocumentUploadData extends DocumentResponseData{
         this.fileType = fileType;
         this.previewUrl = previewUrl;
         this.status = status;
+        this.tagType = tagType;
     }
 
     public DocumentUploadData() {

@@ -53,9 +53,9 @@ public class TextConsumer {
             // 调用原有处理逻辑
             String abstractText = dataProcessUtils.processDocument(
                     dto.getUserId(),
-                    Integer.valueOf(dto.getSessionId()),
                     inputStream,
-                    dto.getFileName()
+                    dto.getFileName(),
+                    dto.getTagName()
             );
             LambdaUpdateWrapper<Document> updateWrapper = new LambdaUpdateWrapper<>();
             updateWrapper
@@ -75,7 +75,6 @@ public class TextConsumer {
                 log.info("文档摘要更新成功！documentId:{}", dto.getDocumentId());
 
                 // 2. 构造简洁的状态对象（推荐：只推送前端需要的字段，减少数据传输）
-
                 Map<String, String> statusVO = new HashMap<>();
                 statusVO.put("documentId", dto.getDocumentId());
                 statusVO.put("status", "AVAILABLE");
@@ -91,10 +90,8 @@ public class TextConsumer {
                     log.error("SSE推送文档状态失败！documentId:{}，异常信息：{}", dto.getDocumentId(), e.getMessage());
                 }
             }
-
         } catch (Exception e) {
             e.printStackTrace();
-            // 异常处理逻辑（如日志记录、重试等）
         }
     }
 

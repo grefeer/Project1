@@ -5,6 +5,8 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.List;
+
 
 @Setter
 @Getter
@@ -19,8 +21,8 @@ public class LoginDataUser extends UserResponseData {
     public LoginDataUser() {
     }
 
-    public LoginDataUser(Integer userId, String username, String role, String expireTime, String token) {
-        super(userId, username, role);
+    public LoginDataUser(Integer userId, String username, String role, String expireTime, String token, List<String> tags) {
+        super(userId, username, role, tags);
         this.expireTime = expireTime;
         this.token = token;
     }

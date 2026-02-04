@@ -22,4 +22,6 @@ public class SessionChat {
     private Integer sessionId;
     @TableField("session_name")
     private String sessionName;
+    @TableField("favorites")
+    private Boolean favorites;
 }

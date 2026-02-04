@@ -1,7 +1,10 @@
 package com.aiqa.project1.nodes;
 
 import com.aiqa.project1.config.SystemConfig;
+import com.aiqa.project1.pojo.tag.OrganizationTag;
+import com.aiqa.project1.service.impl.SpecialTagService;
 import com.aiqa.project1.utils.MilvusSearchUtils;
+import com.aiqa.project1.utils.MilvusSearchUtils1;
 import com.aiqa.project1.utils.RedisStoreUtils;
 import com.aiqa.project1.utils.RegexValidate;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -16,6 +19,7 @@ import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,15 +32,17 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 @Component
 public class NaiveRAGGraph {
     private final OpenAiChatModel douBaoLite;
-    private final MilvusSearchUtils milvusSearchUtils;
+    private final MilvusSearchUtils1 milvusSearchUtils1;
     private final RedisStoreUtils redisStoreUtils;
     private final RabbitTemplate rabbitTemplate;
+    private final SpecialTagService specialTagService;
 
-    public NaiveRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils milvusSearchUtils, RedisStoreUtils redisStoreUtils, RabbitTemplate rabbitTemplate) {
+    public NaiveRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils1 milvusSearchUtils1, RedisStoreUtils redisStoreUtils, RabbitTemplate rabbitTemplate, SpecialTagService specialTagService) {
         this.douBaoLite = douBaoLite;
-        this.milvusSearchUtils = milvusSearchUtils;
+        this.milvusSearchUtils1 = milvusSearchUtils1;
         this.redisStoreUtils = redisStoreUtils;
         this.rabbitTemplate = rabbitTemplate;
+        this.specialTagService = specialTagService;
     }
 
     public CompiledGraph<NaiveRAGState> buildGraph() throws GraphStateException {
@@ -59,14 +65,23 @@ public class NaiveRAGGraph {
                     }
                     filterExpr = String.format("come_from in [%s]", valuesStr);
                 }
+                List<OrganizationTag> tagList = specialTagService.getAllTagsByUserId_(state.getUserId());
 
-                SearchResp searchResp = milvusSearchUtils.hybridSearch(
+                List<String> partitionNames = new ArrayList<>(tagList.stream()
+                        .map(OrganizationTag::getTagName)
+                        .toList());
+                // 去除个人标签
+                partitionNames.remove("PERSONAL");
+                
+                SearchResp searchResp = milvusSearchUtils1.hybridSearch(
                         query,
                         query,
-                        state.getUserId(),  state.getSessionId(),
-                        10, 60,filterExpr
+                        state.getUserId(),
+                        partitionNames,
+                        7, 60, filterExpr
                 );
-                List<String> contentList = MilvusSearchUtils.getContentsFromSearchResp(searchResp).stream().map(Objects::toString).toList();
+                List<String> contentList = new ArrayList<>(MilvusSearchUtils.getContentsFromSearchResp(searchResp)
+                        .stream().map(Objects::toString).toList());
                 return Map.of("retrieval_info", contentList);
             } catch (Exception e) {
                 e.printStackTrace();

@@ -2,6 +2,8 @@ package com.aiqa.project1.pojo.user;
 
 import lombok.*;
 
+import java.util.List;
+
 
 @Setter
 @Getter
@@ -15,8 +17,8 @@ public class InfoDataUser extends UserResponseData {
 
     public InfoDataUser() {}
 
-    public InfoDataUser(Integer userId, String username, String role, String phone, String email, String createdTime, String status) {
-        super(userId, username, role);
+    public InfoDataUser(Integer userId, String username, String role, String phone, String email, String createdTime, String status, List<String> tags) {
+        super(userId, username, role, tags);
         this.phone = phone;
         this.email = email;
         this.createdTime = createdTime;

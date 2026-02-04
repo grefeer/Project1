@@ -1,6 +1,6 @@
 package com.aiqa.project1.worker;
 
-import com.aiqa.project1.utils.MilvusSearchUtils;
+import com.aiqa.project1.utils.MilvusSearchUtils1;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
@@ -12,11 +12,12 @@ import java.util.Map;
 
 @Component
 public class UpdateEmbeddingWorker {
-    private final MilvusSearchUtils milvusSearchUtils;
+    private final MilvusSearchUtils1 milvusSearchUtils1;
 
-    public UpdateEmbeddingWorker(MilvusSearchUtils milvusSearchUtils) {
-        this.milvusSearchUtils = milvusSearchUtils;
+    public UpdateEmbeddingWorker(MilvusSearchUtils1 milvusSearchUtils1) {
+        this.milvusSearchUtils1 = milvusSearchUtils1;
     }
+
 
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(value = "update.embedding", durable = "true"),
@@ -27,7 +28,7 @@ public class UpdateEmbeddingWorker {
         try {
             String userId = paramsMap.get("userId");
             String documentName = paramsMap.get("documentName");
-            if (milvusSearchUtils.deleteDocumentEmbeddingsByName(documentName, userId)) {
+            if (milvusSearchUtils1.deleteDocumentEmbeddingsByName(documentName)) {
                 return;
             } else {
                 throw new RuntimeException("没找到用户%s的文件%s相关向量".formatted(userId, documentName));

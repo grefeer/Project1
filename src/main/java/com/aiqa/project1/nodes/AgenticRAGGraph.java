@@ -4,6 +4,8 @@ import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.mapper.DocumentMapper;
 import com.aiqa.project1.pojo.document.Document;
 import com.aiqa.project1.pojo.qa.RetrievalDecision;
+import com.aiqa.project1.pojo.tag.OrganizationTag;
+import com.aiqa.project1.service.impl.SpecialTagService;
 import com.aiqa.project1.utils.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -34,9 +37,10 @@ import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 @Component
 public class AgenticRAGGraph {
     private final OpenAiChatModel douBaoLite;
-    private final MilvusSearchUtils milvusSearchUtils;
+    private final MilvusSearchUtils1 milvusSearchUtils1;
     private final QuerySplitter querySplitter;
     private final AsyncTaskExecutor asyncTaskExecutor;
+    private final SpecialTagService specialTagService;
     private SseEmitter sseEmitter = null;
 
     // 反思提示模板：评估回答质量，生成反思结论
@@ -185,70 +189,81 @@ public class AgenticRAGGraph {
     private final DocumentMapper documentMapper;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    public AgenticRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils milvusSearchUtils, QuerySplitter querySplitter, AsyncTaskExecutor asyncTaskExecutor, RedisStoreUtils redisStoreUtils, CacheAsideUtils cacheAsideUtils, RabbitTemplate rabbitTemplate, DocumentMapper documentMapper) {
+    public AgenticRAGGraph(OpenAiChatModel douBaoLite, MilvusSearchUtils1 milvusSearchUtils1, QuerySplitter querySplitter, AsyncTaskExecutor asyncTaskExecutor, RedisStoreUtils redisStoreUtils, CacheAsideUtils cacheAsideUtils, RabbitTemplate rabbitTemplate, DocumentMapper documentMapper, SpecialTagService specialTagService) {
         this.douBaoLite = douBaoLite;
-        this.milvusSearchUtils = milvusSearchUtils;
+        this.milvusSearchUtils1 = milvusSearchUtils1;
         this.querySplitter = querySplitter;
         this.asyncTaskExecutor = asyncTaskExecutor;
         this.redisStoreUtils = redisStoreUtils;
         this.cacheAsideUtils = cacheAsideUtils;
         this.rabbitTemplate = rabbitTemplate;
         this.documentMapper = documentMapper;
+        this.specialTagService = specialTagService;
     }
 
     public CompiledGraph<AgenticRAGState> buildGraph() throws GraphStateException {
         // 0. 开始节点
         AsyncNodeAction<AgenticRAGState> startAction = node_async(state -> {
-            boolean RetrievalGlobalFlag = false;
+            boolean RetrievalGlobalFlag = true;
             boolean RetrievalWebFlag = false;
             boolean LocalRetrievalFlag = true;
             boolean HistoryChatRequirements = false;
 
-            Integer sessionId = state.getSessionId();
-            QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
-            List<Document> documentList;
+//            Integer sessionId = state.getSessionId();
+//            QueryWrapper<Document> queryWrapper = new QueryWrapper<>();
+//            List<Document> documentList;
 
-            //        queryWrapper.like("session_id", sessionId.toString());
-            queryWrapper.apply("FIND_IN_SET({0}, session_id) > 0", sessionId);
-            queryWrapper.eq("user_id", state.getUserId());
-            documentList = documentMapper.selectList(queryWrapper);
+//            //        queryWrapper.like("session_id", sessionId.toString());
+//            queryWrapper.apply("FIND_IN_SET({0}, session_id) > 0", sessionId);
 
-            // 当前会话没有传递文件，用数据库进行回答
-            if (documentList == null || documentList.isEmpty()) {
-                QueryWrapper<Document> allQueryWrapper = new QueryWrapper<>();
-                allQueryWrapper.eq("user_id", state.getUserId());
-                documentList = documentMapper.selectList(allQueryWrapper);
-                RetrievalGlobalFlag = true;
-            }
-            Map<String, Long> documentSizeMap = new HashMap<>();
+            // 获取user的所有tag
+            List<OrganizationTag> tagList = specialTagService.getAllTagsByUserId_(state.getUserId());
+            System.out.println("用户的标签为：" + tagList.stream().map(OrganizationTag::toString).collect(Collectors.joining("\n")));
+//            List<String> tagNameList = tagList.stream().map(OrganizationTag::getTagName).toList();
+//            // 过滤出符合标签的文档
+//            queryWrapper
+//                    .eq("user_id", state.getUserId())
+//                    .or()
+//                    .in("tag_type", tagNameList);
+//
+//            documentList = documentMapper.selectList(queryWrapper);
+//
+//            // 当前会话没有传递文件，用数据库进行回答
+//            if (documentList == null || documentList.isEmpty()) {
+//                throw new GraphStateException("没有符合的文档");
+//            }
+//
+//            Map<String, Long> documentSizeMap = new HashMap<>();
+//
+//            String documentsName = documentList.stream()
+//                    .map(document -> {
+//                        documentSizeMap.put(document.getDocumentName(), document.getFileSize());
+//                        return document.getDocumentName();
+//                    })
+//                    .collect(Collectors.joining(", "));
+//            String query = "原问题：" + state.getQuery() + ((state.getRewriteQuery().isEmpty()) ? "": "\n反思重写后的问题：" + state.getRewriteQuery());
+//
+//            String prompt = CHOOSE_TEMPLATE.formatted(
+//                    query,
+//                    documentsName
+//            );
+//
+//            String result = douBaoLite.chat(prompt);
+//            RetrievalDecision retrievalDecision = this.parseLLMJson(result);
+//            // 将相关文档以及检索来源写入state里
+//            if (retrievalDecision != null) {
+//                RetrievalWebFlag = retrievalDecision.isWebRetrievalFlag();
+//                LocalRetrievalFlag = retrievalDecision.isLocalRetrievalFlag();
+//                HistoryChatRequirements = retrievalDecision.isHistoryChatRequirements();
+//
+//            }
 
-            String documentsName = documentList.stream()
-                    .map(document -> {
-                        documentSizeMap.put(document.getDocumentName(), document.getFileSize());
-                        return document.getDocumentName();
-                    })
-                    .collect(Collectors.joining(", "));
-            String query = "原问题：" + state.getQuery() + ((state.getRewriteQuery().isEmpty()) ? "": "\n反思重写后的问题：" + state.getRewriteQuery());
-
-            String prompt = CHOOSE_TEMPLATE.formatted(
-                    query,
-                    documentsName
-            );
-
-            String result = douBaoLite.chat(prompt);
-            RetrievalDecision retrievalDecision = this.parseLLMJson(result);
-            // 将相关文档以及检索来源写入state里
-            if (retrievalDecision != null) {
-                RetrievalWebFlag = retrievalDecision.isWebRetrievalFlag();
-                LocalRetrievalFlag = retrievalDecision.isLocalRetrievalFlag();
-                HistoryChatRequirements = retrievalDecision.isHistoryChatRequirements();
-
-            }
             return Map.of(
                     "retrieval_global_flag", RetrievalGlobalFlag,
                     "retrieval_web_flag", RetrievalWebFlag,
                     "local_retrieval_flag", LocalRetrievalFlag,
-                    "history_chat_requirements", HistoryChatRequirements
+                    "history_chat_requirements", HistoryChatRequirements,
+                    "tags", tagList
                     );
         });
 
@@ -322,16 +337,44 @@ public class AgenticRAGGraph {
 
             // 子查询批量检索
             try {
+                //org.springframework.boot.devtools.restart.classloader.RestartClassLoader @15ecef78
+                List<OrganizationTag> tags = state.getTags();
+
+//                System.out.println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+//                System.out.println("OrganizationTag:" + OrganizationTag.class.getClassLoader());
+//                System.out.println("state.getTags():" + tags.getClass().getClassLoader());
+//                System.out.println(tags);
+//                System.out.println("state.getTags()中的OrganizationTag:" + tags.getFirst().getClass().getClassLoader());
+//                System.out.println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+
+                List<String> partitionNames = new ArrayList<>();
+                if (tags != null) {
+                    for (Object tag : tags) {
+                        try {
+                            Method method = tag.getClass().getMethod("getTagName");
+                            String tagName = (String) method.invoke(tag);
+                            partitionNames.add(tagName);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+//                List<String> partitionNames = new ArrayList<>(tags.stream()
+//                        .map(OrganizationTag::getTagName)
+//                        .toList());
+                // 去除个人标签
+                partitionNames.remove("PERSONAL");
+
                 for (SubQuery1 sq : subQuery) {
-                    SearchResp searchResp = milvusSearchUtils.hybridSearch(
+                    SearchResp searchResp = milvusSearchUtils1.hybridSearch(
                             sq.getSub_question(),
                             sq.getSub_question(),
                             state.getUserId(),
-                            (state.getRetrievalGlobalFlag()) ? 0 : state.getSessionId(),  // 如果用户未在搜索框添加文件，则全局检索
+                            partitionNames,
                             10, 60, filterExpr
                     );
-                    List<String> contentList = MilvusSearchUtils.getContentsFromSearchResp(searchResp)
-                            .stream().map(Objects::toString).toList();
+                    List<String> contentList = new ArrayList<>(MilvusSearchUtils.getContentsFromSearchResp(searchResp)
+                            .stream().map(Objects::toString).toList());
                     retrievalInfo.add(Map.of(sq.getSub_question(), contentList));
                 }
             } catch (Exception e) {
@@ -444,10 +487,6 @@ public class AgenticRAGGraph {
                 .checkpointSaver(new MemorySaver())
                 .build();
         return graph.compile(compileConfig);
-    }
-
-    public void setSseEmitter(SseEmitter sseEmitter) {
-        this.sseEmitter = sseEmitter;
     }
 
     /**

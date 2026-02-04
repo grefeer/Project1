@@ -106,7 +106,7 @@ langchain4j:
     port: 19530
     database-name: Project1
     dimension: 1024
-    collection-name: test
+    collection-name: data
     index-type: FLAT # 索引类型(测试用FLAT即可)
     metric-type: COSINE # 相似度计算方式(余弦相似度)
     consistency-level: strong
@@ -117,7 +117,7 @@ milvus:
   port: 19530
   database-name: Project1
   dimension: 1024
-  collection-name: test
+  collection-name: data
   index-type: FLAT # 索引类型(测试用FLAT即可)
   metric-type: COSINE # 相似度计算方式(余弦相似度)
   consistency-level: strong

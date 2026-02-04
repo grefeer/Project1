@@ -28,4 +28,8 @@ public interface UserService {
      */
     void changePassword(String username, String oldPassword, String newPassword);
 
+    /**
+     * 删除用户
+     */
+    Boolean deleteUserByUserId(Integer userId);
 }

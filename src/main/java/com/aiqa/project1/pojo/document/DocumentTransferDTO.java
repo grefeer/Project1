@@ -20,4 +20,7 @@ public class DocumentTransferDTO implements Serializable {
     private String sessionId;
     private String documentId;
 
+    private String tagName;
+
+
 }

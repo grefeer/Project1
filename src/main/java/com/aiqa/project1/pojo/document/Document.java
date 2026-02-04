@@ -25,5 +25,6 @@ public class Document {
     private String status; // AVAILABLE/DELETED/NOT_EMBEDDED
     private LocalDateTime uploadTime;
     private LocalDateTime updateTime;
+    private String tagType;    // PERSONAL/SPECIAL_TAGS/PUBLIC
 }
 

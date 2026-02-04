@@ -21,11 +21,9 @@ public class DocsController {
 
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
     private final DocsServiceimpl docsService;
-    private final TencentCOSUtil tencentCOSUtil;
 
-    public DocsController(DocsServiceimpl docsService, TencentCOSUtil tencentCOSUtil) {
+    public DocsController(DocsServiceimpl docsService) {
         this.docsService = docsService;
-        this.tencentCOSUtil = tencentCOSUtil;
     }
 
 //    @PostMapping("/update")
@@ -51,24 +49,24 @@ public class DocsController {
     @PostMapping("/upload")
     public Result upload(@RequestParam("file") MultipartFile file,
                          @RequestParam("sessionId") String sessionId,
-                         @RequestParam(required = false) String documentName,
+                         @RequestParam("tagId") Integer tagId,
                          @RequestParam(required = false) String description,
                          @RequestHeader("Authorization") String token) {
         String userId = JwtUtils.getUserIdFromToken(token);
 
-        return docsService.uploadSingleDocument(file, description, userId, sessionId);
+        return docsService.uploadSingleDocument(file, description, tagId, userId, sessionId);
 
     }
 
     @PostMapping("/batch-upload")
     public Result upload(@RequestParam("files") List<MultipartFile> files,
                          @RequestParam("sessionId") String sessionId,
-//                         @RequestParam(name = "documentNames", required = false) List<String> documentNames,
+                         @RequestParam("tagId") Integer tagId,
                          @RequestHeader("Authorization") String token) {
         String userId = JwtUtils.getUserIdFromToken(token);
         Result resp = null;
         try {
-            resp = docsService.uploadMultiDocuments(files, userId, sessionId);
+            resp = docsService.uploadMultiDocuments(files, userId, sessionId, tagId);
 
         } catch (BusinessException e) {
             resp = new Result(e.getCode(), e.getMessage(), e.getData());
