@@ -58,15 +58,14 @@ public class QuestionAnsweringService {
     你的任务是根据提供的对话内容，总结生成一个精准、简洁且具有概括性的标题。
     首先，请阅读以下对话内容：
     <对话内容>
-    {{对话内容}}
+    %s
     </对话内容>
     在生成标题时，请遵循以下要求：
     1. 标题需准确概括对话的核心主题或主要事件，避免遗漏关键信息
     2. 语言简洁明了，避免使用冗长复杂的表述
-    3. 标题长度控制在10-20字之间，最多不超过25字
-    4. 标题应具有一定吸引力，能够体现对话的核心价值或冲突点
-    5. 避免使用专业术语或对话中未提及的信息
-    请在<标题>标签内输出你总结的标题。
+    3. 标题长度控制在10字之内，不能超过10个字
+    4. 只生成标题，不要输出其余内容
+    现在，请输出标题：
     """;
     private final SessionChatMapper sessionChatMapper;
     private final AgenticRAGGraph agenticRAGGraph;
@@ -384,8 +383,7 @@ public class QuestionAnsweringService {
                 int nextSessionId = currentMaxId + 1;
                 String newName = "新会话" + nextSessionId;
 
-                // 执行同步保存逻辑
-                // TODO 这里收藏先默认为false
+                // 执行同步保存逻辑，这里收藏默认为false
                 cacheAsideUtils.saveNewSession(userId, nextSessionId, newName, false);
 
                 log.info("用户 {} 创建新会话: {}", userId, nextSessionId);
@@ -405,14 +403,17 @@ public class QuestionAnsweringService {
      * @return
      */
     @NotNull
-    public Result reNameChatMemoryBySessionId(Integer userId, Integer sessionId) {
+    public Result reNameChatMemoryBySessionId(Integer userId, Integer sessionId, String newName) {
         try {
-            String message = "";
-
-            String prompt = SESSION_SUMMARY_TEMPLATE.formatted();
-            message = douBaoLite.chat(prompt);
-            cacheAsideUtils.setSessionChat(userId, sessionId, message);
-            return Result.define(200, "任务已提交", message);
+            if (newName != null && !newName.isEmpty()) {
+                cacheAsideUtils.setSessionChat(userId, sessionId, newName);
+            } else {
+                String chatMemory = cacheAsideUtils.getChatMemory(userId, sessionId).stream().collect(Collectors.joining("\n"));
+                String prompt = SESSION_SUMMARY_TEMPLATE.formatted(chatMemory);
+                newName = douBaoLite.chat(prompt);
+            }
+            cacheAsideUtils.setSessionChat(userId, sessionId, newName);
+            return Result.define(200, "任务已提交", newName);
         } catch (Exception e) {
             e.printStackTrace();
             return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);

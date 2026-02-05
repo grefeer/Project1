@@ -129,9 +129,10 @@ public class AIAnswerController {
     @GetMapping("/chatMemory/reName/{sessionId}")
     public Result reNameChatMemoryBySessionId(
             @PathVariable Integer sessionId,
+            @RequestParam("newName") String newName,
             @RequestHeader("Authorization") String token) {
         Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
-        return questionAnsweringService.reNameChatMemoryBySessionId(userId, sessionId);
+        return questionAnsweringService.reNameChatMemoryBySessionId(userId, sessionId, newName);
     }
 
     /**
