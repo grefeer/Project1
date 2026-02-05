@@ -1,7 +1,9 @@
 package com.aiqa.project1.utils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -13,9 +15,9 @@ public class RegexValidate {
      * @return 提取到的内容列表
      */
     public static List<String> extractContentInBookMark(String content) {
-        List<String> resultList = new ArrayList<>();
+        Set<String> resultList = new HashSet<>();
         if (content == null || content.isEmpty()) {
-            return resultList; // 空字符串直接返回空列表
+            return resultList.stream().toList(); // 空字符串直接返回空列表
         }
 
         // 核心正则：匹配《》并分组内部内容
@@ -33,6 +35,6 @@ public class RegexValidate {
         if (resultList.isEmpty()) {
             return null;
         }
-        return resultList;
+        return resultList.stream().toList();
     }
 }

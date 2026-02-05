@@ -16,10 +16,7 @@ import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -100,7 +97,7 @@ public class SubQueryRAGGraph {
                             subQuery1.getSub_question(),
                             state.getUserId(),
                             partitionNames,
-                            7, 60, filterExpr
+                            10, 60, filterExpr
                     );
                     List<String> contentList = new ArrayList<>(MilvusSearchUtils.getContentsFromSearchResp(searchResp)
                             .stream().map(Objects::toString).toList());
@@ -118,7 +115,7 @@ public class SubQueryRAGGraph {
                 redisStoreUtils.setChatMemory(
                         state.getUserId(),
                         state.getSessionId(),
-                        "原问题经AI拆解为以下子问题：\n" + subQueries.stream().map(subQuery1 -> "    " + subQuery1.getSub_question()).collect(Collectors.joining("\n"))
+                        "<AI思考>原问题经AI拆解为以下子问题：\n" + subQueries.stream().map(subQuery1 -> "    " + subQuery1.getSub_question()).collect(Collectors.joining("\n"))
                 );
                 return Map.of("sub_query", subQueries);
             } catch (Exception e) {

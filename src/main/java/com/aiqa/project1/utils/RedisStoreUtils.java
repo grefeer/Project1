@@ -510,6 +510,21 @@ public class RedisStoreUtils {
         });
         return keys;
     }
+
+    public void setUserMaxSessionId(Integer userId, Integer sessionId) {
+        String key = SystemConfig.LAST_SESSION_ID.formatted(userId);
+        redisPoolManager.executeWithRetry(template -> {
+            template.opsForValue().set(key, sessionId);
+            return null;
+        });
+    }
+
+    public Integer getUserMaxSessionId(Integer userId) {
+        String key = SystemConfig.LAST_SESSION_ID.formatted(userId);
+        return (Integer) redisPoolManager.executeWithRetry(template -> template.opsForValue().get(key));
+    }
+
+
     //    public Set<String> getAllKeysByScan(String pattern) {
 //        Set<String> keys = new HashSet<>();
 //        AtomicReference<Cursor<String>> cursor = new AtomicReference<>();

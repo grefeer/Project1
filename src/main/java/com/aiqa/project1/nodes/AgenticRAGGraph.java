@@ -337,31 +337,11 @@ public class AgenticRAGGraph {
 
             // 子查询批量检索
             try {
-                //org.springframework.boot.devtools.restart.classloader.RestartClassLoader @15ecef78
                 List<OrganizationTag> tags = state.getTags();
 
-//                System.out.println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-//                System.out.println("OrganizationTag:" + OrganizationTag.class.getClassLoader());
-//                System.out.println("state.getTags():" + tags.getClass().getClassLoader());
-//                System.out.println(tags);
-//                System.out.println("state.getTags()中的OrganizationTag:" + tags.getFirst().getClass().getClassLoader());
-//                System.out.println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-
-                List<String> partitionNames = new ArrayList<>();
-                if (tags != null) {
-                    for (Object tag : tags) {
-                        try {
-                            Method method = tag.getClass().getMethod("getTagName");
-                            String tagName = (String) method.invoke(tag);
-                            partitionNames.add(tagName);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-//                List<String> partitionNames = new ArrayList<>(tags.stream()
-//                        .map(OrganizationTag::getTagName)
-//                        .toList());
+                List<String> partitionNames = new ArrayList<>(tags.stream()
+                        .map(OrganizationTag::getTagName)
+                        .toList());
                 // 去除个人标签
                 partitionNames.remove("PERSONAL");
 

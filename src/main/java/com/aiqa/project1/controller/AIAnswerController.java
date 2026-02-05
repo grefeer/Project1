@@ -45,11 +45,11 @@ public class AIAnswerController {
     ) {
         String question = paramMap.get("question");
         Integer sessionId = Integer.valueOf(paramMap.get("sessionId"));
-//        Integer ragMode = Integer.valueOf(paramMap.get("ragMode"));
+        Integer ragMode = Integer.valueOf(paramMap.get("ragMode"));
         Integer userId = Integer.parseInt(JwtUtils.getUserIdFromToken(token));
 
 
-        return questionAnsweringService.queryRegister(userId, sessionId, question, null);
+        return questionAnsweringService.queryRegister(userId, sessionId, question, ragMode);
     }
 
 

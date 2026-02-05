@@ -92,6 +92,7 @@ public class SystemConfig {
     public static final String CHAT_MEMORY = "chatMemory:userId:%s:sessionId:%s";
     public static final String USER_ACTIVATE_SESSION = "activateSession:userId:%s";
     public static final String SESSION_SUMMARY = "sessionSummary:userId:%s";
+    public static final String LAST_SESSION_ID = "lastSessionId:userId:%s";
 
     public static final String DOCUMENT_PROCESS_STATUS = "documentProcessStatus:userId:%s:sessionId:%s";
 

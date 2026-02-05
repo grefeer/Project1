@@ -316,49 +316,88 @@ public class QuestionAnsweringService {
         }
     }
 
+//    /**
+//     * 从Redis或者MySQL中创建session的整体内容
+//     * @param userId
+//     * @return
+//     */
+//    @NotNull
+//    public Result createSession(Integer userId) {
+//        try {
+//            QueryWrapper<SessionChat> queryWrapper = new QueryWrapper<>();
+//            QueryWrapper<UserChatMemory> queryWrapper_ = new QueryWrapper<>();
+//
+//            queryWrapper.eq("user_id", userId)
+//                    .select("max(session_id) as session_id");
+//            SessionChat sessionChat = sessionChatMapper.selectOne(queryWrapper);
+//            Integer maxSessionId;
+//            List<UserChatMemory> userChatMemories = null;
+//            if(sessionChat != null) {
+//                maxSessionId = sessionChat.getSessionId();
+//                queryWrapper_.eq("user_id", userId)
+//                        .eq("session_id", sessionChat.getSessionId());
+//                userChatMemories = userChatMemoryMapper.selectList(queryWrapper_);
+//            } else {
+//                maxSessionId = 1;
+//            }
+//
+//
+//
+//            if(!(userChatMemories == null || userChatMemories.isEmpty())) {
+//                maxSessionId += 1;
+//            }
+//            String result = cacheAsideUtils.getSessionChat(userId, maxSessionId);
+//            if (result != null) {
+//                return Result.define(200, "会话已存在", Map.of("sessionName", result, "sessionId", maxSessionId));
+//            } else {
+//                cacheAsideUtils.setSessionChat(userId, maxSessionId, "新会话" + maxSessionId);
+//                return Result.define(200, "任务已提交", Map.of("sessionName", "新会话" + maxSessionId, "sessionId", maxSessionId));
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
+//        }
+//    }
     /**
-     * 从Redis或者MySQL中创建session的整体内容
-     * @param userId
-     * @return
+     * 从 Redis 优先创建/获取 session
+     * @param userId 用户ID
      */
     @NotNull
     public Result createSession(Integer userId) {
         try {
-            QueryWrapper<SessionChat> queryWrapper = new QueryWrapper<>();
-            QueryWrapper<UserChatMemory> queryWrapper_ = new QueryWrapper<>();
+            // 1. 获取当前最大 SessionId (Redis 优先)
+            Integer currentMaxId = cacheAsideUtils.getOrSyncMaxSessionId(userId);
 
-            queryWrapper.eq("user_id", userId)
-                    .select("max(session_id) as session_id");
-            SessionChat sessionChat = sessionChatMapper.selectOne(queryWrapper);
-            Integer maxSessionId;
-            List<UserChatMemory> userChatMemories = null;
-            if(sessionChat != null) {
-                maxSessionId = sessionChat.getSessionId();
-                queryWrapper_.eq("user_id", userId)
-                        .eq("session_id", sessionChat.getSessionId());
-                userChatMemories = userChatMemoryMapper.selectList(queryWrapper_);
+            // 2. 检查该会话是否已有对话内容
+            // 利用已有的逻辑：如果 redis/mysql 都没有内容，count 为 0
+            Long memoryCount = cacheAsideUtils.getChatMemoryCount(userId, currentMaxId);
+
+            // 3. 策略判定
+            if (currentMaxId > 0 && memoryCount == 0) {
+                // 情况 A: 存在一个从未发送过消息的空会话，直接复用
+                String sessionName = cacheAsideUtils.getSessionChat(userId, currentMaxId);
+                log.info("用户 {} 复用空会话: {}", userId, currentMaxId);
+                return Result.define(200, "复用空会话",
+                        Map.of("sessionName", sessionName, "sessionId", currentMaxId));
             } else {
-                maxSessionId = 1;
-            }
+                // 情况 B: 当前没有会话，或最后的会话已有内容，需创建新 ID
+                int nextSessionId = currentMaxId + 1;
+                String newName = "新会话" + nextSessionId;
 
+                // 执行同步保存逻辑
+                // TODO 这里收藏先默认为false
+                cacheAsideUtils.saveNewSession(userId, nextSessionId, newName, false);
 
-
-            if(!(userChatMemories == null || userChatMemories.isEmpty())) {
-                maxSessionId += 1;
-            }
-            String result = cacheAsideUtils.getSessionChat(userId, maxSessionId);
-            if (result != null) {
-                return Result.define(200, "会话已存在", Map.of("sessionName", result, "sessionId", maxSessionId));
-            } else {
-                cacheAsideUtils.setSessionChat(userId, maxSessionId, "新会话" + maxSessionId);
-                return Result.define(200, "任务已提交", Map.of("sessionName", "新会话" + maxSessionId, "sessionId", maxSessionId));
+                log.info("用户 {} 创建新会话: {}", userId, nextSessionId);
+                return Result.define(200, "创建新会话成功",
+                        Map.of("sessionName", newName, "sessionId", nextSessionId));
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            return Result.define(ResponseCode.SERVER_ERROR.getCode(), ResponseCode.SERVER_ERROR.getMessage(), e);
+            log.error("创建会话异常", e);
+            return Result.define(ResponseCode.SERVER_ERROR.getCode(),
+                    ResponseCode.SERVER_ERROR.getMessage(), null);
         }
     }
-
 
     /**
      * 给session重命名

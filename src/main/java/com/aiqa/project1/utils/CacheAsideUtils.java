@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -107,6 +108,52 @@ public class CacheAsideUtils {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * 获取用户当前的最高 SessionId (Redis 优先)
+     * @param userId 用户ID
+     * @return 当前最大的 sessionId，如果没有则返回 0
+     */
+    public Integer getOrSyncMaxSessionId(Integer userId) {
+        try {
+            // 1. 尝试从 Redis 获取 (假设 redisStoreUtils 已实现 getUserMaxSessionId)
+            Integer maxId = redisStoreUtils.getUserMaxSessionId(userId);
+            if (maxId != null) {
+                return maxId;
+            }
+
+            // 2. Redis 缺失，查询数据库
+            QueryWrapper<SessionChat> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("user_id", userId)
+                    .select("MAX(session_id) as session_id");
+            SessionChat sessionChat = sessionChatMapper.selectOne(queryWrapper);
+
+            int dbMaxId = (sessionChat != null && sessionChat.getSessionId() != null)
+                    ? sessionChat.getSessionId() : 0;
+
+            // 3. 回写 Redis 并设置过期时间（例如 24 小时），防止僵尸数据
+            redisStoreUtils.setUserMaxSessionId(userId, dbMaxId);
+            return dbMaxId;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
+    /**
+     * 更新用户最大会话 ID 并同步数据库
+     */
+    public void saveNewSession(Integer userId, Integer sessionId, String name, Boolean favorites) {
+        // 1. 写入数据库
+        if (favorites == null) favorites = false;
+        sessionChatMapper.insert(new SessionChat(null, userId, sessionId, name, favorites));
+
+        // 2. 更新 Redis 中的最大 ID 计数器
+        redisStoreUtils.setUserMaxSessionId(userId, sessionId);
+
+        // 3. 更新会话名称缓存
+        redisStoreUtils.setSessionChat(userId, sessionId, name);
     }
 
 //    /**
