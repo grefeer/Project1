@@ -10,24 +10,43 @@ import com.aiqa.project1.pojo.tag.DocumentTag;
 import com.aiqa.project1.pojo.tag.OrganizationTag;
 import com.aiqa.project1.pojo.tag.UserTag;
 import com.aiqa.project1.pojo.user.LoginDataUser;
+import com.aiqa.project1.pojo.user.RegisterDataUser;
 import com.aiqa.project1.pojo.user.User;
+import com.aiqa.project1.pojo.user.UserForCsv;
 import com.aiqa.project1.service.UserService;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.JwtUtils;
 import com.aiqa.project1.utils.UserUtils;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.opencsv.CSVReader;
+import com.opencsv.bean.CsvToBean;
+import com.opencsv.bean.CsvToBeanBuilder;
+import com.opencsv.exceptions.CsvException;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.apache.commons.io.FilenameUtils;
 
 @Service
 public class UserServiceimpl implements UserService {
@@ -89,18 +108,49 @@ public class UserServiceimpl implements UserService {
             throw new BusinessException(500, errMsg, null);
         }
 
-        UserTag entity1 = new UserTag();
-        UserTag entity2 = new UserTag();
-        Integer userId = userMapper.getUserIdByUserName(user.getUsername());
+        return setTagsForNewUser(user);
+    }
 
-        // 2是个人标签ID，3是公共标签ID
-        entity1.setTagId(2L);
-        entity1.setUserId(userId);
-        entity2.setTagId(3L);
-        entity2.setUserId(userId);
-        userTagMapper.insert(List.of(entity1, entity2));
 
-        return userId;
+    @Override
+    public Result batchRegister(MultipartFile userCsv) {
+        if (userCsv.isEmpty()) {
+            throw new BusinessException(404, "上传的CSV文件不能为空！", null);
+        }
+        String originalFilename = userCsv.getOriginalFilename();
+        if (originalFilename == null || !"csv".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename))) {
+            throw new BusinessException(404, "请上传后缀为.csv的文件！！", null);
+        }
+
+        try (InputStreamReader reader = new InputStreamReader(userCsv.getInputStream(), StandardCharsets.UTF_8)) {
+            // 替换原解析逻辑，使用CsvToBean解析为实体类
+            CsvToBean<UserForCsv> csvToBean = new CsvToBeanBuilder<UserForCsv>(reader)
+                    .withType(UserForCsv.class) // 指定要映射的实体类
+                    .withIgnoreLeadingWhiteSpace(true) // 忽略单元格前的空格
+                    .withIgnoreEmptyLine(true) // 忽略空行
+                    .withSkipLines(1) // 跳过CSV表头（根据实际场景调整，若表头是字段名则开启）
+                    .build();
+
+            List<UserForCsv> userList = csvToBean.parse();
+            System.out.println("解析出用户数量：" + userList.size());
+
+            validateUser(userList, false);
+            List<User> userList1 = userList.stream().map(this::buildUserEntity).toList();
+            // 复用register
+            userList1.forEach(this::register);
+//            userMapper.insert(userList1);
+//            // 为每个用户夹在默认标签
+//            userList1.forEach(this::setTagsForNewUser);
+
+            return Result.success("用户批量导入成功，共导入" + userList.size() + "个用户", null);
+
+        } catch (IOException e) {
+            return Result.define(500, "文件读取失败：" + e.getMessage(), null);
+        } catch (BusinessException e) {
+            e.printStackTrace();
+            return Result.define(500,  e.getMessage(), null);
+
+        }
     }
 
     @Override
@@ -179,6 +229,90 @@ public class UserServiceimpl implements UserService {
             e.printStackTrace();
             return false;
         }
+    }
+
+    private User buildUserEntity(UserForCsv userForCsv) {
+        User user = new User();
+        user.setUsername(userForCsv.getUsername());
+        user.setPassword(userForCsv.getPassword()); // 注意：实际项目中需加密密码（比如BCrypt）
+        user.setPhone(userForCsv.getPhone());
+        user.setEmail(userForCsv.getEmail());
+        user.setRole(userForCsv.getRole());
+        user.setCreatedTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        return user;
+    }
+
+
+    private void validateUser(List<UserForCsv> userForCsvList, Boolean coverageFlag) {
+        // coverageFlag为true，则
+        StringBuilder errStr = new StringBuilder();
+        if (!coverageFlag) {
+            String users = userForCsvList.stream()
+                    .map(UserForCsv::getUsername)
+                    .filter(username -> userMapper.selectOne(new QueryWrapper<User>().eq("username", username)) != null)
+                    .collect(Collectors.joining(","));
+            if (!users.isEmpty())
+                errStr.append("用户%s已经存在，无需注册".formatted(users));
+        }
+        for (UserForCsv userForCsv : userForCsvList) {
+            String username = userForCsv.getUsername();
+            String password = userForCsv.getPassword();
+            String phone = userForCsv.getPhone();
+            String email = userForCsv.getEmail();
+            // 非空校验
+            if (!StringUtils.hasText(username)) {
+                errStr.append("用户名不能为空");
+            }
+            if (!StringUtils.hasText(password)) {
+                errStr.append("%s的密码不能为空\n".formatted(username));
+            }
+            // 手机号/邮箱格式校验（可根据业务补充正则）
+            if (StringUtils.hasText(phone) && !phone.matches("^1[3-9]\\d{9}$")) {
+                errStr.append("%s的手机号格式不正确\n".formatted(username));
+            }
+            if (StringUtils.hasText(email) && !email.matches("^\\w+([-+.']\\w+)*@\\w+([-.]\\w+)*\\.\\w+([-.]\\w+)*$")) {
+                errStr.append("%s的邮箱格式不正确\n".formatted(username));
+            }
+        }
+        String errString = errStr.toString();
+        if (!errString.isEmpty()) {
+            throw new BusinessException(400, errString, null);
+        }
+    }
+    private void validateUserParams(UserForCsv userForCsv) {
+        String username = userForCsv.getUsername();
+        String password = userForCsv.getPassword();
+        String phone = userForCsv.getPhone();
+        String email = userForCsv.getEmail();
+
+        // 非空校验
+        if (!StringUtils.hasText(username)) {
+            throw new IllegalArgumentException("---用户名不能为空");
+        }
+        if (!StringUtils.hasText(password)) {
+            throw new IllegalArgumentException("---密码不能为空");
+        }
+        // 手机号/邮箱格式校验（可根据业务补充正则）
+        if (StringUtils.hasText(phone) && !phone.matches("^1[3-9]\\d{9}$")) {
+            throw new IllegalArgumentException("---手机号格式不正确");
+        }
+        if (StringUtils.hasText(email) && !email.matches("^\\w+([-+.']\\w+)*@\\w+([-.]\\w+)*\\.\\w+([-.]\\w+)*$")) {
+            throw new IllegalArgumentException("---邮箱格式不正确");
+        }
+    }
+
+    private Integer setTagsForNewUser(User user) {
+        UserTag entity1 = new UserTag();
+        UserTag entity2 = new UserTag();
+        Integer userId = userMapper.getUserIdByUserName(user.getUsername());
+
+        // 2是个人标签ID，3是公共标签ID
+        entity1.setTagId(2L);
+        entity1.setUserId(userId);
+        entity2.setTagId(3L);
+        entity2.setUserId(userId);
+        userTagMapper.insert(List.of(entity1, entity2));
+        return userId;
     }
 
 }

@@ -1,7 +1,11 @@
 package com.aiqa.project1.service;
 
 import com.aiqa.project1.pojo.Result;
+import com.aiqa.project1.pojo.user.RegisterDataUser;
 import com.aiqa.project1.pojo.user.User;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Map;
 
 public interface UserService {
 
@@ -10,7 +14,7 @@ public interface UserService {
      */
     int register(User user);
 
-
+    Result batchRegister(MultipartFile userCsv);
     /**
      * 用户登录
      * @return 包含用户信息、Token、过期时间的DTO

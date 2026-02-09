@@ -6,26 +6,32 @@ import com.aiqa.project1.pojo.ResponseCode;
 import com.aiqa.project1.pojo.Result;
 import com.aiqa.project1.mapper.SpecialTagMapper;
 import com.aiqa.project1.mapper.UserMapper;
-import com.aiqa.project1.pojo.tag.OrganizationTag;
-import com.aiqa.project1.pojo.tag.TagQueryList;
-import com.aiqa.project1.pojo.tag.UserQueryList;
-import com.aiqa.project1.pojo.tag.UserTag;
+import com.aiqa.project1.pojo.tag.*;
 import com.aiqa.project1.pojo.user.User;
+import com.aiqa.project1.pojo.user.UserForCsv;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.MilvusSearchUtils1;
+import com.aiqa.project1.utils.UserUtils;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.opencsv.bean.CsvToBean;
+import com.opencsv.bean.CsvToBeanBuilder;
 import jakarta.servlet.http.HttpServletRequest;
+import org.apache.commons.io.FilenameUtils;
+import org.apache.ibatis.executor.BatchResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class SpecialTagService {
@@ -281,6 +287,96 @@ public class SpecialTagService {
         } catch (Exception e) {
             e.printStackTrace();
             return Result.error(e.getMessage(), null);
+        }
+    }
+
+    public Result createTags(Integer userId, MultipartFile file) {
+        if (userId == null) {
+            throw new BusinessException(400, "创建人ID不能为空", null);
+        }
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(404, "上传的CSV文件不能为空！", null);
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !"csv".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename))) {
+            throw new BusinessException(404, "请上传后缀为.csv的文件！！", null);
+        }
+
+        try (InputStreamReader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
+            CsvToBean<OrganizationTagForCsv> csvToBean = new CsvToBeanBuilder<OrganizationTagForCsv>(reader)
+                    .withType(OrganizationTagForCsv.class) // 指定要映射的实体类
+                    .withIgnoreLeadingWhiteSpace(true) // 忽略单元格前的空格
+                    .withIgnoreEmptyLine(true) // 忽略空行
+                    .withSkipLines(1) // 跳过CSV表头（根据实际场景调整，若表头是字段名则开启）
+                    .build();
+
+            List<OrganizationTagForCsv> tagList = csvToBean.parse();
+
+            if (CollectionUtils.isEmpty(tagList)) {
+                throw new BusinessException(400, "CSV文件中未解析到有效标签数据", null);
+            }
+
+            validateCsvTagData(tagList);
+
+            LocalDateTime now = LocalDateTime.now();
+            List<OrganizationTag> organizationTags = tagList.stream().map(tag -> {
+                OrganizationTag organizationTag = UserUtils.copyDuplicateFieldsFromA2B(tag, new OrganizationTag());
+                organizationTag.setCreatedAt(now);
+                organizationTag.setCreatedBy(userId);
+                return organizationTag;
+            }).toList();
+
+            specialTagMapper.insert(organizationTags);
+
+            System.out.printf("CSV标签批量导入成功，创建人ID：%s，导入标签数量：%s%n", userId, tagList.size());
+            return Result.success("标签批量导入成功，共导入" + tagList.size() + "条标签", null);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error(e.getMessage(), null);
+        }
+    }
+
+    /**
+     * 校验CSV解析后的标签数据合法性
+     * @param tagCsvList CSV解析后的标签列表
+     */
+    private void validateCsvTagData(List<OrganizationTagForCsv> tagCsvList) {
+        String errorStr = "";
+        // 3.1 校验标签名称非空
+        String emptyTagNameList = tagCsvList.stream()
+                .filter(tag -> tag.getTagName() == null || tag.getTagName().trim().isEmpty())
+                .map(tag -> "行数据：" + tag)
+                .collect(Collectors.joining(","));
+        if (!emptyTagNameList.isEmpty()) {
+            errorStr += ("CSV文件中存在标签名称为空的行：" + emptyTagNameList);}
+
+        // 3.2 校验标签名称重复（CSV内部重复）
+        List<String> tagNames = tagCsvList.stream()
+                .map(tag -> tag.getTagName().trim())
+                .collect(Collectors.toList());
+        String duplicateTagNames = tagNames.stream()
+                .collect(Collectors.groupingBy(String::toString, Collectors.counting()))
+                .entrySet().stream()
+                .filter(entry -> entry.getValue() > 1)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.joining(","));
+        if (!duplicateTagNames.isEmpty()) {
+            errorStr += ("CSV文件中存在重复的标签名称：" + duplicateTagNames);
+        }
+
+        // 3.3 校验标签名称是否已存在于数据库（避免重复插入）
+        QueryWrapper<OrganizationTag> wrapper = new QueryWrapper<>();
+        wrapper.in("tag_name", tagNames);
+        List<OrganizationTag> existTags = specialTagMapper.selectList(wrapper);
+        if (!CollectionUtils.isEmpty(existTags)) {
+            String existTagNames = existTags.stream()
+                    .map(OrganizationTag::getTagName)
+                    .collect(Collectors.joining(","));
+            errorStr += ("CSV文件中包含已存在的标签名称：" + existTagNames);
+        }
+        if (!errorStr.isEmpty()) {
+            throw new BusinessException(400, errorStr, null);
         }
     }
 

@@ -8,6 +8,7 @@ import com.aiqa.project1.utils.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -36,6 +37,18 @@ public class SpecialTagController {
         String parentTag = paramMap.get("parentTag");
         String description = paramMap.get("description");
         return specialTagService.createTag(Integer.valueOf(authInfo.getUserId()), tag, description, parentTag);
+    }
+
+    /**
+     * 批量创建Tag（只有管理员可以）
+     * @return
+     */
+    @PostMapping("/create/batch")
+    public Result createTags(@RequestParam MultipartFile file, HttpServletRequest request) {
+        AuthInfo authInfo = (AuthInfo)request.getAttribute("authInfo");
+        if (!"ADMIN".contains(authInfo.getRole()))
+            return Result.define(ResponseCode.AUTH_ERROR.getCode(), ResponseCode.AUTH_ERROR.getMessage(),null);
+        return specialTagService.createTags(Integer.valueOf(authInfo.getUserId()), file);
     }
 
     /**

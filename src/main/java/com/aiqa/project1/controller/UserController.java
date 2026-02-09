@@ -15,9 +15,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-
-
+import org.springframework.web.multipart.MultipartFile;
 
 
 @RestController
@@ -65,6 +63,34 @@ public class UserController {
         }
         return resp;
     }
+
+    @PostMapping("/register/batch")
+    public Result BatchRegister(@RequestParam("file") MultipartFile file) {
+        Result resp = new Result();
+
+        try {
+            Result result = userService.batchRegister(file);
+
+            log.info("--------------用户注册--------------");
+            log.info("状态码为：" + ResponseCode.REGISTER_SUCCESS.getCode());
+            log.info(ResponseCode.REGISTER_SUCCESS.getMessage());
+            log.info("----------------------------------");
+
+            return result;
+        } catch (BusinessException e) {
+            resp.setCode(e.getCode());
+            resp.setMessage(e.getMessage());
+            resp.setData(null);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            resp.setCode(ResponseCode.SERVER_ERROR.getCode());
+            resp.setMessage(ResponseCode.SERVER_ERROR.getMessage());
+            resp.setData(null);
+        }
+        return resp;
+    }
+
 
     @PostMapping("/login")
     public Result Login(@RequestBody User user) {
