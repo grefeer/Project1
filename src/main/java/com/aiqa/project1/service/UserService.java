@@ -33,6 +33,16 @@ public interface UserService {
     void changePassword(String username, String oldPassword, String newPassword);
 
     /**
+     * 修改电话号码
+     */
+    void changePhone(String username, String oldPhone, String newPhone);
+
+    /**
+     * 修改邮箱
+     */
+    void changeEmail(String username, String oldEmail, String newEmail);
+
+    /**
      * 删除用户
      */
     Boolean deleteUserByUserId(Integer userId);

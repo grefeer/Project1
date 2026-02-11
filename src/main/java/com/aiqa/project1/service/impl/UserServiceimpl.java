@@ -17,11 +17,9 @@ import com.aiqa.project1.service.UserService;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.JwtUtils;
 import com.aiqa.project1.utils.UserUtils;
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.opencsv.CSVReader;
-import com.opencsv.bean.CsvToBean;
-import com.opencsv.bean.CsvToBeanBuilder;
-import com.opencsv.exceptions.CsvException;
+
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,8 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDateTime;
@@ -118,20 +118,18 @@ public class UserServiceimpl implements UserService {
             throw new BusinessException(404, "上传的CSV文件不能为空！", null);
         }
         String originalFilename = userCsv.getOriginalFilename();
-        if (originalFilename == null || !"csv".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename))) {
+        if (originalFilename == null || !("csv".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename)) || "xlsx".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename)))) {
+            System.out.println(FilenameUtils.getExtension(originalFilename));
             throw new BusinessException(404, "请上传后缀为.csv的文件！！", null);
         }
 
-        try (InputStreamReader reader = new InputStreamReader(userCsv.getInputStream(), StandardCharsets.UTF_8)) {
-            // 替换原解析逻辑，使用CsvToBean解析为实体类
-            CsvToBean<UserForCsv> csvToBean = new CsvToBeanBuilder<UserForCsv>(reader)
-                    .withType(UserForCsv.class) // 指定要映射的实体类
-                    .withIgnoreLeadingWhiteSpace(true) // 忽略单元格前的空格
-                    .withIgnoreEmptyLine(true) // 忽略空行
-                    .withSkipLines(1) // 跳过CSV表头（根据实际场景调整，若表头是字段名则开启）
-                    .build();
+        try  {            // 替换原解析逻辑，使用CsvToBean解析为实体类
+            List<UserForCsv> userList = EasyExcel.read(userCsv.getInputStream())
+                    .head(UserForCsv.class)
+                    .sheet()
+                    .doReadSync();
+//            List<UserForCsv> userList = csvToBean.parse();
 
-            List<UserForCsv> userList = csvToBean.parse();
             System.out.println("解析出用户数量：" + userList.size());
             // 校验用户元数据
             validateUser(userList, false);
@@ -215,6 +213,39 @@ public class UserServiceimpl implements UserService {
     }
 
     @Override
+    public void changePhone(String username, String oldPhone, String newPhone) {
+        User user = userMapper.getUserByUserName(username);
+
+        if (! oldPhone.equals(user.getPhone())) {
+            throw new BusinessException(
+                    ResponseCode.PASSWORD_ERROR.getCode(),
+                    "旧电话号码输入错误",
+                    null
+            );
+        }
+
+        // TODO 缺乏验证码校验过程
+        userMapper.updateUserPhoneByUserName(username, newPhone);
+    }
+
+    @Override
+    public void changeEmail(String username, String oldEmail, String newEmail) {
+        User user = userMapper.getUserByUserName(username);
+
+        if (! oldEmail.equals(user.getEmail())) {
+            throw new BusinessException(
+                    ResponseCode.PASSWORD_ERROR.getCode(),
+                    "旧邮箱输入错误",
+                    null
+            );
+        }
+
+        // TODO 缺乏验证码校验过程
+        userMapper.updateUserPhoneByUserName(username, newEmail);
+    }
+
+
+    @Override
     @Transactional
     public Boolean deleteUserByUserId(Integer userId) {
         try {
@@ -255,6 +286,8 @@ public class UserServiceimpl implements UserService {
                 errStr.append("用户%s已经存在，无需注册".formatted(users));
         }
         for (UserForCsv userForCsv : userForCsvList) {
+            System.out.println(userForCsv);
+
             String username = userForCsv.getUsername();
             String password = userForCsv.getPassword();
             String phone = userForCsv.getPhone();

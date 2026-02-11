@@ -150,7 +150,40 @@ public class UserController {
         return resp;
     }
 
-    @PutMapping("/change-pwd")
+    @PutMapping("/change/email")
+    public Result changeEmail(@RequestBody Map<String, String> paramMap) {
+
+        String oldEmail = paramMap.get("oldEmail");
+        String newEmail = paramMap.get("newEmail");
+        String username = paramMap.get("username");
+
+        Result resp = new Result();
+        resp.setData(null);
+
+        log.info("--------------修改邮箱--------------");
+        log.info("账户名称为：" + username);
+        log.info("旧邮箱为：" + oldEmail);
+        log.info("新邮箱为：" + newEmail);
+
+        try {
+            userService.changeEmail(username, oldEmail, newEmail);
+            resp.setCode(200);
+            resp.setMessage("邮箱修改成功");
+            log.info("--------------修改成功--------------");
+        } catch (BusinessException e) {
+            log.info("------------原邮箱输入错误-----------");
+            resp.setCode(e.getCode());
+            resp.setMessage(e.getMessage());
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            resp.setCode(ResponseCode.SERVER_ERROR.getCode());
+            resp.setMessage(ResponseCode.SERVER_ERROR.getMessage());
+        }
+        return resp;
+    }
+
+    @PutMapping("/change/password")
     public Result changePassword(@RequestBody Map<String, String> paramMap) {
 
         String oldPassword = paramMap.get("oldPassword");
@@ -172,6 +205,39 @@ public class UserController {
             log.info("--------------修改成功--------------");
         } catch (BusinessException e) {
             log.info("------------原密码输入错误-----------");
+            resp.setCode(e.getCode());
+            resp.setMessage(e.getMessage());
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            resp.setCode(ResponseCode.SERVER_ERROR.getCode());
+            resp.setMessage(ResponseCode.SERVER_ERROR.getMessage());
+        }
+        return resp;
+    }
+
+    @PutMapping("/change/phone")
+    public Result changePhone(@RequestBody Map<String, String> paramMap) {
+
+        String oldPhone = paramMap.get("oldPhone");
+        String newPhone = paramMap.get("newPhone");
+        String username = paramMap.get("username");
+
+        Result resp = new Result();
+        resp.setData(null);
+
+        log.info("--------------修改电话号码--------------");
+        log.info("账户名称为：" + username);
+        log.info("旧电话号码为：" + oldPhone);
+        log.info("新电话号码为：" + newPhone);
+
+        try {
+            userService.changePhone(username, oldPhone, newPhone);
+            resp.setCode(200);
+            resp.setMessage("电话号码修改成功");
+            log.info("--------------修改成功--------------");
+        } catch (BusinessException e) {
+            log.info("------------原电话号码输入错误-----------");
             resp.setCode(e.getCode());
             resp.setMessage(e.getMessage());
         }

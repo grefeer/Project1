@@ -45,6 +45,13 @@ public interface UserMapper extends BaseMapper<User> {
     @Update("update user set password=#{password} where username=#{username}")
     public Integer updateUserPasswordByUserName(@Param("username") String username, @Param("password") String password);
 
+    @Update("update user set phone=#{phone} where username=#{username}")
+    public Integer updateUserPhoneByUserName(@Param("username") String username, @Param("phone") String phone);
+
+    @Update("update user set email=#{email} where username=#{username}")
+    public Integer updateUserEmailByUserName(@Param("username") String username, @Param("email") String email);
+
+
     // 方式2：自定义SQL查询（推荐复杂场景）
     @Select("SELECT u.* FROM user u " +
             "JOIN user_tag ut ON u.user_id = ut.user_id " +

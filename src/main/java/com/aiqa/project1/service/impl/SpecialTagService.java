@@ -12,11 +12,10 @@ import com.aiqa.project1.pojo.user.UserForCsv;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.MilvusSearchUtils1;
 import com.aiqa.project1.utils.UserUtils;
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.opencsv.bean.CsvToBean;
-import com.opencsv.bean.CsvToBeanBuilder;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.ibatis.executor.BatchResult;
@@ -244,8 +243,7 @@ public class SpecialTagService {
                 queryWrapper.like("tag_name", keyword);
             }
 
-            QueryWrapper<OrganizationTag> tagQueryWrapper = new QueryWrapper<>();
-            Long totalUserCount = specialTagMapper.selectCount(tagQueryWrapper);
+            Long totalUserCount = specialTagMapper.selectCount(queryWrapper);
 
             int totalPages = (int)(totalUserCount / pageSize + 1);
 
@@ -298,19 +296,23 @@ public class SpecialTagService {
             throw new BusinessException(404, "上传的CSV文件不能为空！", null);
         }
         String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null || !"csv".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename))) {
-            throw new BusinessException(404, "请上传后缀为.csv的文件！！", null);
+        if (originalFilename == null || !("csv".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename)) || "xlsx".equalsIgnoreCase(FilenameUtils.getExtension(originalFilename)))) {
+            throw new BusinessException(404, "请上传后缀为.csv或.xlsx的文件！！", null);
         }
 
         try (InputStreamReader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)) {
-            CsvToBean<OrganizationTagForCsv> csvToBean = new CsvToBeanBuilder<OrganizationTagForCsv>(reader)
-                    .withType(OrganizationTagForCsv.class) // 指定要映射的实体类
-                    .withIgnoreLeadingWhiteSpace(true) // 忽略单元格前的空格
-                    .withIgnoreEmptyLine(true) // 忽略空行
-                    .withSkipLines(1) // 跳过CSV表头（根据实际场景调整，若表头是字段名则开启）
-                    .build();
-
-            List<OrganizationTagForCsv> tagList = csvToBean.parse();
+            List<OrganizationTagForCsv> tagList = EasyExcel.read(file.getInputStream())
+                    .head(OrganizationTagForCsv.class)
+                    .sheet()
+                    .doReadSync();
+            //            CsvToBean<OrganizationTagForCsv> csvToBean = new CsvToBeanBuilder<OrganizationTagForCsv>(reader)
+//                    .withType(OrganizationTagForCsv.class) // 指定要映射的实体类
+//                    .withIgnoreLeadingWhiteSpace(true) // 忽略单元格前的空格
+//                    .withIgnoreEmptyLine(true) // 忽略空行
+//                    .withSkipLines(1) // 跳过CSV表头（根据实际场景调整，若表头是字段名则开启）
+//                    .build();
+//
+//            List<OrganizationTagForCsv> tagList = csvToBean.parse();
 
             if (CollectionUtils.isEmpty(tagList)) {
                 throw new BusinessException(400, "CSV文件中未解析到有效标签数据", null);
@@ -350,6 +352,8 @@ public class SpecialTagService {
                 .collect(Collectors.joining(","));
         if (!emptyTagNameList.isEmpty()) {
             errorStr += ("CSV文件中存在标签名称为空的行：" + emptyTagNameList);}
+
+        tagCsvList.forEach(System.out::println);
 
         // 3.2 校验标签名称重复（CSV内部重复）
         List<String> tagNames = tagCsvList.stream()
