@@ -133,7 +133,7 @@ public class UserServiceimpl implements UserService {
 
             List<UserForCsv> userList = csvToBean.parse();
             System.out.println("解析出用户数量：" + userList.size());
-
+            // 校验用户元数据
             validateUser(userList, false);
             List<User> userList1 = userList.stream().map(this::buildUserEntity).toList();
             // 复用register
