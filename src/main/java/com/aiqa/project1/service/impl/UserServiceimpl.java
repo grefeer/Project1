@@ -29,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,6 +42,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,7 +78,7 @@ public class UserServiceimpl implements UserService {
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.NESTED)
     public int register(User user) {
 
         User existingUser = userMapper.getUserByUserName(user.getUsername());
@@ -113,6 +115,7 @@ public class UserServiceimpl implements UserService {
 
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Result batchRegister(MultipartFile userCsv) {
         if (userCsv.isEmpty()) {
             throw new BusinessException(404, "上传的CSV文件不能为空！", null);
@@ -136,6 +139,14 @@ public class UserServiceimpl implements UserService {
             List<User> userList1 = userList.stream().map(this::buildUserEntity).toList();
             // 复用register
             userList1.forEach(this::register);
+            // 为新用户贴标签
+            for (UserForCsv user : userList) {
+                String username = user.getUsername();
+                String[] tagNames = user.getTagName().split(",");
+                Arrays.stream(tagNames).forEach(tagName ->
+                    userTagMapper.insertUserTagRsByTagName(username, tagName)
+                );
+            }
 //            userMapper.insert(userList1);
 //            // 为每个用户夹在默认标签
 //            userList1.forEach(this::setTagsForNewUser);

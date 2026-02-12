@@ -23,4 +23,6 @@ public class UserForCsv {
     private String phone;
     @ExcelProperty("邮箱")
     private String email;
+    @ExcelProperty("标签名称")
+    private String tagName;
 }

@@ -27,7 +27,7 @@ public class OrganizationTag implements Serializable {
     private String description; // 描述
 
     @TableField("parent_tag")
-    private String parentTag; // 父标签ID
+    private String parentTag = null; // 父标签ID
 
     @TableField("created_by")
     private Integer createdBy; // 创建者ID

@@ -8,7 +8,6 @@ import com.aiqa.project1.mapper.SpecialTagMapper;
 import com.aiqa.project1.mapper.UserMapper;
 import com.aiqa.project1.pojo.tag.*;
 import com.aiqa.project1.pojo.user.User;
-import com.aiqa.project1.pojo.user.UserForCsv;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.MilvusSearchUtils1;
 import com.aiqa.project1.utils.UserUtils;
@@ -147,6 +146,25 @@ public class SpecialTagService {
      * @return
      */
     public List<OrganizationTag> getAllTagsByUserId_(Integer userId) {
+        // 获取用户的所有Tag
+        List<UserTagHierarchyVO> userTagHierarchyVOS = userTagMapper.selectUserAllTagsWithChildren(userId);
+        List<Long> tagIds = new ArrayList<>(userTagHierarchyVOS.stream()
+                .map(UserTagHierarchyVO::getTagId)
+                .toList());
+
+        if (tagIds.isEmpty()) {
+            return new ArrayList<>(); // 无标签时直接返回空列表
+        }
+        return specialTagMapper.selectList(new QueryWrapper<OrganizationTag>().in("tag_id", tagIds));
+    }
+
+    /**
+     * 获取某个用户所有的标签
+     * @param userId
+     * @return
+     */
+    public List<OrganizationTag> getParentTagsByUserId_(Integer userId) {
+        // 获取用户的所有Tag
         QueryWrapper<UserTag> userTagQueryWrapper = new QueryWrapper<>();
         System.out.println("11111122222222");
         System.out.println(userId);
@@ -156,6 +174,7 @@ public class SpecialTagService {
         List<Long> tagIds = new ArrayList<>(userTagList.stream()
                 .map(UserTag::getTagId)
                 .toList());
+
 
         if (tagIds.isEmpty()) {
             return new ArrayList<>(); // 无标签时直接返回空列表

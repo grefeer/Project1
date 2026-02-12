@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiqa.project1.mapper.UserTagMapper">
+
+    <!-- 结果映射：匹配VO字段和SQL查询字段 -->
+    <resultMap id="TagHierarchyResultMap" type="com.aiqa.project1.pojo.tag.UserTagHierarchyVO">
+        <result column="tag_id" property="tagId"/>
+        <result column="root_tag_id" property="rootTagId"/>
+        <result column="level" property="level"/>
+    </resultMap>
+
+    <!-- 查询指定用户的所有标签（含多级子标签） -->
+    <select id="selectUserAllTagsWithChildren" resultMap="TagHierarchyResultMap">
+        WITH RECURSIVE tag_hierarchy AS (
+            -- 初始层：用户直接绑定的标签（关联标签表获取名称）
+            SELECT
+                ut.tag_id,
+                ot.tag_name,
+                ut.tag_id AS root_tag_id,
+                0 AS level
+            FROM user_tag ut
+                     INNER JOIN organization_tags ot ON ut.tag_id = ot.tag_id
+            WHERE ut.user_id = #{userId}
+
+            UNION ALL
+
+            -- 递归层：通过父标签名称匹配子标签
+            SELECT
+                ot_child.tag_id,
+                ot_child.tag_name,
+                th.root_tag_id,
+                th.level + 1 AS level
+            FROM organization_tags ot_child
+                     INNER JOIN tag_hierarchy th ON ot_child.parent_tag = th.tag_name
+        )
+        SELECT DISTINCT tag_id, root_tag_id, level
+        FROM tag_hierarchy
+        ORDER BY level, tag_id;
+    </select>
+
+</mapper>
