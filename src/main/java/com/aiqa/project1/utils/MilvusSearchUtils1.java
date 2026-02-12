@@ -315,6 +315,46 @@ public class MilvusSearchUtils1 {
     }
 
     /**
+     * 统计指定collection的全部有效向量个数（自动过滤软删除数据）
+     * @return 有效向量数
+     */
+    public Long countAllValidVectors() {
+        QueryReq queryParam = QueryReq.builder()
+                .collectionName(collectionName)
+                .outputFields(Collections.singletonList("count(*)"))
+                .filter("user_id != 0")
+                .build();
+        QueryResp query = milvusClient.query(queryParam);
+        Long cnt = (Long) query.getQueryResults().getFirst().getEntity().get("count(*)");
+        System.out.println(query);
+        // TODO 查看全部有效向量个数
+        return cnt;
+    }
+
+    /**
+     * 带过滤条件统计有效向量个数（支持按tagName、userId等过滤）
+     * @param filterExpr Milvus过滤表达式（如 "tag_name == 'TEST' AND user_id == 123"）
+     * @return 符合条件的有效向量数
+     */
+    public Long countValidVectorsWithFilter(String filterExpr) {
+        // 校验过滤表达式合法性（可选）
+        if (filterExpr == null || filterExpr.trim().isEmpty()) {
+            return countAllValidVectors(); // 无过滤条件时统计全量
+        }
+
+        QueryReq queryParam = QueryReq.builder()
+                .collectionName(collectionName)
+                .filter(filterExpr)
+                .outputFields(Collections.singletonList("count(*)"))
+                .build();
+        QueryResp query = milvusClient.query(queryParam);
+        System.out.println(query);
+        // TODO 查看全部有效向量个数
+        return 1L;
+    }
+
+
+    /**
      * 精确匹配过滤：查询 come_from 等于指定值的结果(无向量检索)
      * @param userId 用户ID
      * @param targetValue 目标值

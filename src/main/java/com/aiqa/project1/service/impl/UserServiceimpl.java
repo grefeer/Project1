@@ -8,6 +8,7 @@ import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.aiqa.project1.pojo.tag.DocumentTag;
 import com.aiqa.project1.pojo.tag.OrganizationTag;
+import com.aiqa.project1.pojo.tag.TagNameCount;
 import com.aiqa.project1.pojo.tag.UserTag;
 import com.aiqa.project1.pojo.user.LoginDataUser;
 import com.aiqa.project1.pojo.user.RegisterDataUser;
@@ -16,9 +17,12 @@ import com.aiqa.project1.pojo.user.UserForCsv;
 import com.aiqa.project1.service.UserService;
 import com.aiqa.project1.utils.BusinessException;
 import com.aiqa.project1.utils.JwtUtils;
+import com.aiqa.project1.utils.MilvusSearchUtils1;
 import com.aiqa.project1.utils.UserUtils;
 import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+
+import com.alibaba.fastjson.JSON;
 
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -31,6 +35,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,12 +45,10 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FilenameUtils;
@@ -64,9 +67,10 @@ public class UserServiceimpl implements UserService {
     private final DocumentTagMapper documentTagMapper;
     private final SessionChatMapper sessionChatMapper;
     private final UserChatMemoryMapper userChatMemoryMapper;
+    private final MilvusSearchUtils1 milvusSearchUtils1;
 
     @Autowired
-    public UserServiceimpl(UserMapper userMapper, PasswordEncoder passwordEncoder, UserTagMapper userTagMapper, SpecialTagMapper specialTagMapper, DocumentMapper documentMapper, DocumentTagMapper documentTagMapper, SessionChatMapper sessionChatMapper, UserChatMemoryMapper userChatMemoryMapper) {
+    public UserServiceimpl(UserMapper userMapper, PasswordEncoder passwordEncoder, UserTagMapper userTagMapper, SpecialTagMapper specialTagMapper, DocumentMapper documentMapper, DocumentTagMapper documentTagMapper, SessionChatMapper sessionChatMapper, UserChatMemoryMapper userChatMemoryMapper, MilvusSearchUtils1 milvusSearchUtils1) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.userTagMapper = userTagMapper;
@@ -75,6 +79,7 @@ public class UserServiceimpl implements UserService {
         this.documentTagMapper = documentTagMapper;
         this.sessionChatMapper = sessionChatMapper;
         this.userChatMemoryMapper = userChatMemoryMapper;
+        this.milvusSearchUtils1 = milvusSearchUtils1;
     }
 
     @Override
@@ -271,6 +276,67 @@ public class UserServiceimpl implements UserService {
             e.printStackTrace();
             return false;
         }
+    }
+
+    /*
+    获取系统仪表盘
+    用户状态：总人数，今日在线人数，部门用户分布
+    问答核心：今日问答数、累计问答数
+    知识库：已上传文档数、有效向量条数、待处理 / 处理失败文档数
+    */
+    @Override
+    public Map<String, String> getDashBoard() {
+        try {
+            // 用户状态：总人数，今日在线人数，部门用户分布
+            Long userNumber = userMapper.selectCount(new QueryWrapper<>());
+            Integer todayActiveUserCount = userChatMemoryMapper.getTodayActiveUserCount();
+            List<TagNameCount> tagsCountAndNames = specialTagMapper.getTagsCountAndNames();
+            // 问答核心：今日问答数、累计问答数
+            Integer todayActiveChatCount = userChatMemoryMapper.getTodayActiveChatCount();
+            Long totalChatCount = userChatMemoryMapper.selectCount(new QueryWrapper<>());
+            // 知识库：已上传文档数、有效向量条数、待处理 / 处理失败文档数
+            Long documentCount = documentMapper.selectCount(new QueryWrapper<>());
+            Long documentSuccessCount = documentMapper.selectCount(new QueryWrapper<Document>().eq("status", "AVAILABLE"));
+            Long embeddingCount = milvusSearchUtils1.countAllValidVectors();
+
+            // ========== 新增：过去7天每日统计 ==========
+            // 1. 过去7天每天的成功上传文档数
+            List<DailyCountVO> sevenDaysDailyDocCount = fillEmptyDate(documentMapper.getSevenDaysDailySuccessDocumentCount());
+            // 2. 过去7天每天的问答数
+            List<DailyCountVO> sevenDaysDailyChatCount = fillEmptyDate(userChatMemoryMapper.getSevenDaysDailyChatCount());
+
+            return Map.of(
+                    "userNumber", userNumber.toString(),
+                    "todayActiveUserCount", todayActiveUserCount.toString(),
+                    "tagsCountAndNames", CollectionUtils.isEmpty(tagsCountAndNames) ? "[]" : JSON.toJSONString(tagsCountAndNames),
+                    "todayActiveChatCount", todayActiveChatCount.toString(),
+                    "totalChatCount", totalChatCount.toString(),
+                    "documentCount", documentCount.toString(),
+                    "documentFailureCount", Long.toString(documentCount - documentSuccessCount),
+                    "embeddingCount", embeddingCount.toString(),
+                    "sevenDaysDailyDocCount", CollectionUtils.isEmpty(sevenDaysDailyDocCount) ? "[]" : JSON.toJSONString(sevenDaysDailyDocCount),
+                    "sevenDaysDailyChatCount", CollectionUtils.isEmpty(sevenDaysDailyChatCount) ? "[]" : JSON.toJSONString(sevenDaysDailyChatCount)
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Map.of("error", e.getMessage());
+        }
+    }
+
+    // 示例：补全过去7天的日期，无数据则count=0
+    private List<DailyCountVO> fillEmptyDate(List<DailyCountVO> originalList) {
+        // 1. 生成过去7天的所有日期（yyyy-MM-dd）
+        List<String> last7Days = new ArrayList<>();
+        LocalDate today = LocalDate.now();
+        for (int i = 6; i >= 0; i--) {
+            last7Days.add(today.minusDays(i).toString());
+        }
+        // 2. 补全数据
+        Map<String, Integer> countMap = originalList.stream()
+                .collect(Collectors.toMap(DailyCountVO::getDate, DailyCountVO::getCount));
+        return last7Days.stream()
+                .map(date -> new DailyCountVO(date, countMap.getOrDefault(date, 0)))
+                .collect(Collectors.toList());
     }
 
     private User buildUserEntity(UserForCsv userForCsv) {

@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -258,5 +259,22 @@ public class UserController {
         }
         return Result.error("删除用户：%s 失败".formatted(userId),null);
     }
+
+    /**
+     * 用户状态：总人数，今日在线人数，部门用户分布
+     * 问答核心：今日问答数、累计问答数、平均响应时长
+     * 知识库：已上传文档数、有效向量条数、待处理 / 处理失败文档数
+     */
+    @GetMapping("/dashboard")
+    public Result getDashBoard(HttpServletRequest request) {
+        AuthInfo authInfo = (AuthInfo) request.getAttribute("authInfo");
+        if (! authInfo.getRole().equals("ADMIN")) {
+            return Result.error("无权限访问系统仪表盘", null);
+        }
+        Map<String, String> map = userService.getDashBoard();
+        map.forEach((s, s2) -> System.out.println(s + " " + s2));
+        return Result.success("系统仪表盘获取成功!", map);
+    }
+
 }
 
