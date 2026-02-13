@@ -152,6 +152,34 @@ public class AIAnswerController {
     }
 
     /**
+     * 收藏对话
+     * @param sessionId
+     * @param token
+     * @return
+     */
+    @PostMapping("/favorite/set/{sessionId}")
+    public Result setChatFavorite(
+            @PathVariable Integer sessionId,
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        return questionAnsweringService.setChatFavorite(userId, sessionId);
+    }
+
+    /**
+     * 取消收藏对话
+     * @param sessionId
+     * @param token
+     * @return
+     */
+    @PostMapping("/favorite/reset/{sessionId}")
+    public Result resetChatFavorite(
+            @PathVariable Integer sessionId,
+            @RequestHeader("Authorization") String token) {
+        Integer userId = Integer.valueOf(JwtUtils.getUserIdFromToken(token));
+        return questionAnsweringService.resetChatFavorite(userId, sessionId);
+    }
+
+    /**
      * 这个代码是一个智能文档系统的后端代码以及部分前端代码以及部分接口文档，为这个后端代码编写前端代码，要求：
      * 问答界面主要逻辑如下：一开始会调用“/api/v1/qa/chatMemory”获取所有对话的元信息，包括sessionId以及sessionName；
      * 之后根据这个在边栏处显示历史对话的sessionName；

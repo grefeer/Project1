@@ -10,4 +10,7 @@ public interface SessionChatMapper extends BaseMapper<SessionChat> {
 
     @Update("update sessionchat set session_name=#{sessionName} where user_id=#{userId} && session_id=#{sessionId}")
     public void updateSessionNameByUserIdAndSessionId(Integer userId, Integer sessionId, String sessionName);
+
+    @Update("update sessionchat set favorites=#{favorites} where user_id=#{userId} && session_id=#{sessionId}")
+    public void updateFavoritesByUserIdAndSessionId(Integer userId, Integer sessionId, Integer favorites);
 }

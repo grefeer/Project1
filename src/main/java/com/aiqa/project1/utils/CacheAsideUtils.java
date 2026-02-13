@@ -98,7 +98,7 @@ public class CacheAsideUtils {
             System.out.println(sessionChats);
             Map<String, String> map = sessionChats
                     .stream()
-                    .collect(Collectors.toMap(sessionChat1 -> sessionChat1.getSessionId().toString(), SessionChat::getSessionName));
+                    .collect(Collectors.toMap(sessionChat1 -> sessionChat1.getSessionId().toString(), sessionChat1 -> sessionChat1.getSessionName() + "::" + sessionChat1.getFavorites().toString()));
 
             System.out.println(map);
             if (map != null) {

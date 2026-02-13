@@ -2,7 +2,6 @@ package com.aiqa.project1.mapper;
 
 import com.aiqa.project1.pojo.tag.OrganizationTag;
 import com.aiqa.project1.pojo.tag.TagNameCount;
-import com.aiqa.project1.pojo.user.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;

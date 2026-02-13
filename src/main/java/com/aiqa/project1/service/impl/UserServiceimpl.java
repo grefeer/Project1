@@ -6,12 +6,9 @@ import com.aiqa.project1.pojo.*;
 import com.aiqa.project1.pojo.document.Document;
 import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
-import com.aiqa.project1.pojo.tag.DocumentTag;
-import com.aiqa.project1.pojo.tag.OrganizationTag;
 import com.aiqa.project1.pojo.tag.TagNameCount;
 import com.aiqa.project1.pojo.tag.UserTag;
 import com.aiqa.project1.pojo.user.LoginDataUser;
-import com.aiqa.project1.pojo.user.RegisterDataUser;
 import com.aiqa.project1.pojo.user.User;
 import com.aiqa.project1.pojo.user.UserForCsv;
 import com.aiqa.project1.service.UserService;
@@ -24,13 +21,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
 import com.alibaba.fastjson.JSON;
 
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -39,12 +33,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -64,7 +53,6 @@ public class UserServiceimpl implements UserService {
     private final UserTagMapper userTagMapper;
     private final SpecialTagMapper specialTagMapper;
     private final DocumentMapper documentMapper;
-    private final DocumentTagMapper documentTagMapper;
     private final SessionChatMapper sessionChatMapper;
     private final UserChatMemoryMapper userChatMemoryMapper;
     private final MilvusSearchUtils1 milvusSearchUtils1;
@@ -76,7 +64,6 @@ public class UserServiceimpl implements UserService {
         this.userTagMapper = userTagMapper;
         this.specialTagMapper = specialTagMapper;
         this.documentMapper = documentMapper;
-        this.documentTagMapper = documentTagMapper;
         this.sessionChatMapper = sessionChatMapper;
         this.userChatMemoryMapper = userChatMemoryMapper;
         this.milvusSearchUtils1 = milvusSearchUtils1;

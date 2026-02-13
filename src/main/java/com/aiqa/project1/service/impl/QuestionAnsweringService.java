@@ -441,6 +441,21 @@ public class QuestionAnsweringService {
         }
     }
 
+    public Result setChatFavorite(Integer userId, Integer sessionId) {
+        sessionChatMapper.updateFavoritesByUserIdAndSessionId(userId,sessionId, 1);
+        return Result.define(200, "喜好设置成功", null);
+    }
+
+    public Result resetChatFavorite(Integer userId, Integer sessionId) {
+        try {
+            sessionChatMapper.updateFavoritesByUserIdAndSessionId(userId,sessionId, 0);
+            return Result.define(200, "对话收藏成功", null);
+        } catch (Exception e) {
+            return Result.error("对话收藏失败", null);
+        }
+    }
+
+
 //    public Result deleteChatMemory1(Integer userId, Integer sessionId, String queries) {
 //        try {
 //            String[] queryStrings = queries.split("<问答分隔符>");
