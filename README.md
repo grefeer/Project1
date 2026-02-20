@@ -86,15 +86,20 @@ llm:
 趋势化数据展示：近 7 天活跃用户数、近 7 天文档保存数、用户提问使用量
 数据可视化图表（饼图 / 折线图），基于 ECharts 实现，直观呈现系统运行状态
 ## 技术栈
-模块 | 核心技术/框架
-后端框架	   |   Spring Boot 3.2+、Spring Security（权限控制）、Spring Data JPA/MyBatis-Plus
-向量数据库	 |   Milvus Java SDK / Redis Stack Java Client / Elasticsearch Java Client
-大模型集成	 |   LangChain4j（RAG 流程编排）、各厂商大模型 Java SDK
-文档解析	 	 |   Apache POI、PDFBox、Tika、CommonMark（Markdown 解析）
-权限控制	 	 |   Spring Security + JWT + 自定义标签权限过滤器
-数据库		   |   MySQL 8.0+ / PostgreSQL（用户、标签、对话元数据存储）
-流式交互		  |   SSE（Server-Sent Events）、WebSocket
-部署	      |   Docker / Docker Compose / Kubernetes
+
+| 模块 | 核心技术/框架 |
+| ------------- | ------------- |
+| 后端框架 | Spring Boot 3.2+、Spring Security（权限控制）、Spring Data JPA/MyBatis-Plus |
+| 向量数据库 | Milvus Java SDK / Redis Stack Java Client / Elasticsearch Java Client |
+| 大模型集成	 |   LangChain4j（RAG 流程编排）、各厂商大模型 Java SDK |
+| 文档解析	 	 |   Apache POI、PDFBox、Tika、CommonMark（Markdown 解析） |
+| 权限控制	 	 |   Spring Security + JWT + 自定义标签权限过滤器 |
+| 数据库		   |   MySQL 8.0+ / PostgreSQL（用户、标签、对话元数据存储） |
+| 流式交互		  |   SSE（Server-Sent Events）、WebSocket |
+| 部署	      |   Docker / Docker Compose / Kubernetes |
+
+### 项目目录结构（标准 Java 工程）
+
 
 ### 注意
 此respiratory仅是后端代码，前端代码请见本账号的project1frontend项目
