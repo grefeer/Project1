@@ -1,2 +1,3 @@
 # Project1
 基于Java的智能文档管理与智能问答平台
+此respiratory仅是后端代码，前端代码请见本账号的project1frontend项目
