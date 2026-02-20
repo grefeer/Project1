@@ -10,7 +10,6 @@ import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.aiqa.project1.utils.CacheAsideUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
-import com.aiqa.project1.worker.StateProducer;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -37,7 +36,6 @@ import java.util.stream.IntStream;
 @Slf4j
 @Service
 public class QuestionAnsweringService {
-    private final StateProducer stateProducer;
     private final RedisStoreUtils redisStoreUtils;
     private final UserChatMemoryMapper userChatMemoryMapper;
     private final CacheAsideUtils cacheAsideUtils;
@@ -70,8 +68,7 @@ public class QuestionAnsweringService {
     private final SessionChatMapper sessionChatMapper;
     private final AgenticRAGGraph agenticRAGGraph;
 
-    public QuestionAnsweringService(StateProducer stateProducer, RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite, SessionChatMapper sessionChatMapper, AgenticRAGGraph agenticRAGGraph, NaiveRAGGraph naiveRAGGraph, SubQueryRAGGraph subQueryRAGGraph) throws GraphStateException {
-        this.stateProducer = stateProducer;
+    public QuestionAnsweringService( RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite, SessionChatMapper sessionChatMapper, AgenticRAGGraph agenticRAGGraph, NaiveRAGGraph naiveRAGGraph, SubQueryRAGGraph subQueryRAGGraph) throws GraphStateException {
         this.redisStoreUtils = redisStoreUtils;
         this.userChatMemoryMapper = userChatMemoryMapper;
         this.cacheAsideUtils = cacheAsideUtils;
