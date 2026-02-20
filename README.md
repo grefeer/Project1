@@ -41,34 +41,7 @@ cd Project1
 # 复制并修改application.yml配置
 cp src/main/resources/application-example.yml src/main/resources/application.yml
 ```
-关键配置示例：
-```yaml
-# 数据库配置
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/techdoc_rag?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: root
-    password: your-password
-    driver-class-name: com.mysql.cj.jdbc.Driver
-milvus:
-  host: 127.0.0.1
-  port: 19530
-  database-name: Project1
-  dimension: 1024
-  collection-name: data
-  index-type: FLAT # 索引类型(测试用FLAT即可)
-  metric-type: COSINE # 相似度计算方式(余弦相似度)
-  consistency-level: strong
 
-rag:
-  sub-question:
-    cache-expire-seconds: 60
-    enable-cache: false
-    retrieve-retry-times: 2
-    retrieve-top-k: 10
-    sub-question-max-num: 5
-    retrieve-timeout-ms: 5000
-```
 
 ## 功能详解
 ### 1. 文件上传与权限管控
