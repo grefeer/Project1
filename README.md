@@ -50,12 +50,24 @@ spring:
     username: root
     password: your-password
     driver-class-name: com.mysql.cj.jdbc.Driver
-# 向量库配置
-vector:
-  milvus:
-    host: localhost
-    port: 19530
-    database: techdoc_rag
+milvus:
+  host: 127.0.0.1
+  port: 19530
+  database-name: Project1
+  dimension: 1024
+  collection-name: data
+  index-type: FLAT # 索引类型(测试用FLAT即可)
+  metric-type: COSINE # 相似度计算方式(余弦相似度)
+  consistency-level: strong
+
+rag:
+  sub-question:
+    cache-expire-seconds: 60
+    enable-cache: false
+    retrieve-retry-times: 2
+    retrieve-top-k: 10
+    sub-question-max-num: 5
+    retrieve-timeout-ms: 5000
 ```
 
 ## 功能详解
