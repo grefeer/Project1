@@ -89,16 +89,14 @@ llm:
 
 | 模块 | 核心技术/框架 |
 | ------------- | ------------- |
-| 后端框架 | Spring Boot 3.2+、Spring Security（权限控制）、Spring Data JPA/MyBatis-Plus |
-| 向量数据库 | Milvus Java SDK / Redis Stack Java Client / Elasticsearch Java Client |
-| 大模型集成	 |   LangChain4j（RAG 流程编排）、各厂商大模型 Java SDK |
-| 文档解析	 	 |   Apache POI、PDFBox、Tika、CommonMark（Markdown 解析） |
-| 权限控制	 	 |   Spring Security + JWT + 自定义标签权限过滤器 |
-| 数据库		   |   MySQL 8.0+ / PostgreSQL（用户、标签、对话元数据存储） |
-| 流式交互		  |   SSE（Server-Sent Events）、WebSocket |
-| 部署	      |   Docker / Docker Compose / Kubernetes |
+| 后端框架 | Spring Boot 3.2+、MyBatis-Plus |
+| 大模型集成	 |   LangChain4j（RAG 流程编排）/ 火山引擎 SDK / 嵌入模型 |
+| 文档解析	 	 |   Apache POI、PDFBox、Tika |
+| 权限控制	 	 |   JWT / 自定义标签权限过滤器 |
+| 数据库		   |   MySQL 8.0+ / Redis / Milvus Java SDK |
+| 流式交互		  |   SSE / WebSocket |
+| 部署	      |   Docker / Ollama |
 
-### 项目目录结构（标准 Java 工程）
 
 
 ### 注意
