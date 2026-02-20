@@ -56,11 +56,6 @@ vector:
     host: localhost
     port: 19530
     database: techdoc_rag
-# 大模型配置
-llm:
-  type: zhipu # 可选：openai/zhipu/tongyi
-  api-key: your-api-key
-  base-url: https://open.bigmodel.cn/api/paas/v4/
 ```
 
 ## 功能详解
