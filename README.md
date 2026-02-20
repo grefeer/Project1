@@ -35,14 +35,10 @@ TechDocRAG 是基于 **Java 技术栈** 构建的企业内部技术交流及设�
 git clone https://github.com/grefeer/Project1.git
 cd Project1
 ```
-  2. 配置系统参数
-复制配置文件模板并修改核心配置（数据库连接、向量库地址、大模型 API 等）：
-```Bash
-# 复制并修改application.yml配置
-cp src/main/resources/application-example.yml src/main/resources/application.yml
-```
-
-
+  2. 下载Docker，并拉取Redis、RabbitMQ、Milvus等镜像
+  3. 配置系统参数
+复制配置文件模板并修改核心配置（数据库连接、向量库地址、大模型 API 等）
+  4. 获取前端代码，并配置环境
 ## 功能详解
 ### 1. 文件上传与权限管控
 普通用户在文件上传界面选择自有标签完成文件上传
