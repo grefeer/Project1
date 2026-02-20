@@ -71,7 +71,7 @@ cd Project1
 | 权限控制	 	 |   JWT / 自定义标签权限过滤器 |
 | 数据库		   |   MySQL 8.0+ / Redis / Milvus Java SDK |
 | 流式交互		  |   SSE / WebSocket |
-| 部署	      |   Docker / Ollama |
+| 部署	      |   Docker |
 
 
 
