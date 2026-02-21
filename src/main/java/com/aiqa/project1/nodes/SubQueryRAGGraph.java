@@ -176,7 +176,7 @@ public class SubQueryRAGGraph {
 
         // Compile the graph
         CompileConfig compileConfig = CompileConfig.builder()
-                .checkpointSaver(new MemorySaver())
+//                .checkpointSaver(new MemorySaver())
                 .build();
         
         return graph.compile(compileConfig);

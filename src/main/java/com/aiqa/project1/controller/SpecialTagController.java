@@ -166,7 +166,30 @@ public class SpecialTagController {
         return specialTagService.getAllTags(request);
     }
 
+    /**
+     * 获取所有标签的信息
+     * @param request
+     * @return
+     */
+    @DeleteMapping("/remove/tag/{tagId}")
+    public Result deleteTag(
+            @PathVariable("tagId") Long tagId,
+            HttpServletRequest request
+    ) {
+        AuthInfo authInfo = (AuthInfo)request.getAttribute("authInfo");
+        Integer userId = Integer.parseInt(authInfo.getUserId());
+        return specialTagService.deleteTag(userId, tagId);
+    }
 
-
+    @DeleteMapping("/remove/user/{userId}")
+    public Result deleteUser(
+            @PathVariable("userId") Integer userId,
+            @RequestParam("tagName") String tagName,
+            HttpServletRequest request
+    ) {
+        AuthInfo authInfo = (AuthInfo)request.getAttribute("authInfo");
+        Integer autoId = Integer.parseInt(authInfo.getUserId());
+        return specialTagService.deleteUser(autoId, userId, tagName);
+    }
 
 }

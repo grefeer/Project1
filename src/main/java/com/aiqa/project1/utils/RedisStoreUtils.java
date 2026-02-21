@@ -311,12 +311,15 @@ public class RedisStoreUtils {
      */
     public List<Object> getChatMemory(Integer userId, Integer sessionId, Integer limit) {
         String key = SystemConfig.CHAT_MEMORY.formatted(userId, sessionId);
-        if (limit == 0) return null;
+        if (limit != null && limit == 0) return null;
         return redisPoolManager.executeWithRetry(template -> {
-            // 直接使用负数索引：-limit 表示取最后 limit 个元素
-            long start = (limit != null && limit > 0) ? -limit : 0;
             template.expire(key, DEFAULT_TTL);
-            return template.opsForList().range(key, start, -1);
+            if (limit != null && limit < 0) {
+                return template.opsForList().range(key, 0, -1);
+            } else {
+                long start = (limit != null && limit > 0) ? -limit : 0;
+                return template.opsForList().range(key, start, -1);
+            }
         });
     }
 

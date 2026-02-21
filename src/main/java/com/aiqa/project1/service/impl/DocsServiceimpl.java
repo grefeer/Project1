@@ -480,7 +480,8 @@ public class DocsServiceimpl implements DocsService {
             if (! authInfo.getRole().equals("ADMIN")) {
                 // 获取user的所有tag
                 List<OrganizationTag> tagList = specialTagService.getAllTagsByUserId_(Integer.valueOf(userId));
-                List<String> tagNameList = tagList.stream().map(OrganizationTag::getTagName).toList();
+                List<String> tagNameList = new ArrayList<>(tagList.stream().map(OrganizationTag::getTagName).toList());
+                tagNameList.remove("PERSONAL");
                 // 过滤出符合标签的文档
                 queryWrapper
                         .eq("user_id", userId)

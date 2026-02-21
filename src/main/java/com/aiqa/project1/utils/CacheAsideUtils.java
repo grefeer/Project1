@@ -68,8 +68,9 @@ public class CacheAsideUtils {
             if (sessionChat == null) return null;
 
             result = sessionChat.getSessionName();
-            if (result != null) {
-                redisStoreUtils.setSessionChat(userId, sessionId, result);
+            Boolean favorites = sessionChat.getFavorites();
+            if (result != null && favorites != null) {
+                redisStoreUtils.setSessionChat(userId, sessionId, result + "::" + favorites);
             }
             return result;
         } catch (Exception e) {
@@ -153,7 +154,7 @@ public class CacheAsideUtils {
         redisStoreUtils.setUserMaxSessionId(userId, sessionId);
 
         // 3. 更新会话名称缓存
-        redisStoreUtils.setSessionChat(userId, sessionId, name);
+        redisStoreUtils.setSessionChat(userId, sessionId, name + "::" + favorites);
     }
 
 //    /**
@@ -221,6 +222,40 @@ public class CacheAsideUtils {
             throw new RuntimeException(e);
         }
     }
+
+    /**
+     * 读ChatMemory（带重试机制）
+     * @param userId
+     * @param sessionId
+     */
+    public List<String> getChatMemory(Integer userId, Integer sessionId, Integer limit) {
+        try {
+            List<String> result;
+            result = redisStoreUtils.getChatMemory(userId, sessionId, limit)
+                    .stream()
+                    .map(Objects::toString)
+                    .toList();
+            // redis命中
+            if (result != null) {
+                return result;
+            }
+
+            QueryWrapper<UserChatMemory> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("user_id", userId);
+            queryWrapper.eq("session_id", sessionId);
+            result = userChatMemoryMapper.selectList(queryWrapper)
+                    .stream()
+                    .map(UserChatMemory::getContent)
+                    .toList();
+            if (result != null) {
+                redisStoreUtils.batchSetChatMemory(userId, sessionId, result);
+            }
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 
     public Long getChatMemoryCount(Integer userId, Integer sessionId) {
         Long currentChatMemoryCount = redisStoreUtils.getChatMemoryCount(userId, sessionId);

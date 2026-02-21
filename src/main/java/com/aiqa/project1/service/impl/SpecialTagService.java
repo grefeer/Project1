@@ -116,6 +116,41 @@ public class SpecialTagService {
         return new Result(200, "Tag get successfully", specialTag);
     }
 
+    public Result deleteTag(Integer userId, Long TagId) {
+        try {
+            OrganizationTag organizationTag = specialTagMapper.selectOne(new QueryWrapper<OrganizationTag>().eq("tag_id", TagId));
+            if (organizationTag == null) {
+                return Result.error("Tag不存在", null);
+            }
+            if (! organizationTag.getCreatedBy().equals(userId)) {
+                return Result.error("您不是Tag的创造者, 无法删除该Tag", null);
+            }
+            specialTagMapper.deleteById(TagId);
+            return Result.success("删除成果", null);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.define(404, e.getMessage(), null);
+        }
+    }
+
+    public Result deleteUser(Integer autoId, Integer userId, String tagName) {
+        try {
+            OrganizationTag organizationTag = specialTagMapper.selectOne(new QueryWrapper<OrganizationTag>().eq("tag_name", tagName));
+            if (organizationTag == null) {
+                return Result.error("Tag不存在", null);
+            }
+            int deleteCnt = userTagMapper.delete(new QueryWrapper<UserTag>().eq("user_id", userId).eq("tag_id", organizationTag.getTagId()));
+            if (deleteCnt > 0) {
+                return Result.success("删除成功", null);
+            } else {
+                return Result.error("删除失败，user或许没有该Tag", null);
+            }
+        } catch (Exception e) {
+            return Result.error(e.getMessage(), null);
+        }
+    }
+
+
     /**
      * 获取所有的标签
      * @return

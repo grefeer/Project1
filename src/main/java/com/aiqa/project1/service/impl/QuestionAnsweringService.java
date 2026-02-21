@@ -177,24 +177,37 @@ public class QuestionAnsweringService {
      */
     @NotNull
     public Result getAnswerStatus(Integer sessionId, Integer userId, Integer memoryId) {
-        // 判断ai是否更新了思考过程或者回答
-        Integer currentChatMemoryCount = Math.toIntExact(cacheAsideUtils.getChatMemoryCount(userId, sessionId));
-        if (currentChatMemoryCount < memoryId.longValue()) {
-            System.out.println(currentChatMemoryCount + "::" + memoryId);
-            return Result.define(202, "AI 正在思考中...", null);
-        } else {
+        try {
+            // 1. 入参校验
+            if (sessionId == null || userId == null || memoryId == null) {
+                return Result.define(400, "参数不能为空", null);
+            }
+
+            // 2. 安全获取chatMemoryCount（避免null转int异常）
+            Long chatMemoryCountLong = cacheAsideUtils.getChatMemoryCount(userId, sessionId);
+            if (chatMemoryCountLong == null) {
+                log.warn("用户{}会话{}的聊天计数为null", userId, sessionId);
+                return Result.define(202, "AI 正在思考中...", null);
+            }
+            Integer currentChatMemoryCount = Math.toIntExact(chatMemoryCountLong);
+
+            if (currentChatMemoryCount < memoryId.longValue()) {
+                return Result.define(202, "AI 正在思考中...", null);
+            }
+
             int count = currentChatMemoryCount - memoryId;
-            if (count <= 0) return Result.define(202, "AI 正在思考中...", null); // 至少获取当前最新的一条
+            if (count <= 0) return Result.define(202, "AI 正在思考中...", null);
 
-            System.out.println(currentChatMemoryCount + ":" + memoryId);
-            // 从 Redis 获取当前最新的回答内容
+            // 3. 安全获取Redis数据（避免null/空列表异常）
+            List<Object> chatMemoryObjList = redisStoreUtils.getChatMemory(userId, sessionId, count);
+            if (chatMemoryObjList == null || chatMemoryObjList.isEmpty()) {
+                log.warn("用户{}会话{}无有效聊天数据", userId, sessionId);
+                return Result.define(202, "AI 正在思考中...", null);
+            }
 
-            List<String> currentAnswer = redisStoreUtils.getChatMemory(
-                    userId,
-                    sessionId,
-                    count)
-                    .stream()
-                    .map(Object::toString)
+            List<String> currentAnswer = chatMemoryObjList.stream()
+                    .map(obj -> obj == null ? "" : obj.toString()) // 空值兜底
+                    .filter(str -> !str.isEmpty()) // 过滤空字符串
                     .toList();
 
             Map<String, Object> data = new HashMap<>();
@@ -206,14 +219,18 @@ public class QuestionAnsweringService {
                             .boxed()
                             .collect(Collectors.toList()));
 
-            if (currentAnswer == null) {
+            // 4. 安全判断最终回答（避免空列表getLast()）
+            if (currentAnswer.isEmpty()) {
                 return Result.define(202, "AI 正在思考中...", data);
             } else if (currentAnswer.getLast().contains("<最终回答>")) {
-                // 状态：已完成
                 return Result.define(200, "回答完毕", data);
             } else {
                 return Result.define(206, "正在回答", data);
             }
+        } catch (Exception e) {
+            // 捕获所有异常，记录日志并返回友好结果
+            log.error("获取回答状态异常：用户{}会话{}memoryId{}", userId, sessionId, memoryId, e);
+            return Result.define(500, "服务器处理失败", null);
         }
     }
 
