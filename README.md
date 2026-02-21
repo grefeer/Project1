@@ -3,8 +3,7 @@ TechDocRAG 是基于 **Java 技术栈** 构建的企业内部技术交流及设�
 
 # 演示视频
 
-<iframe src="//player.bilibili.com/player.html?isOutside=true&aid=116107696479949&bvid=BV1sPfEBzEwE&cid=36193568650&p=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
-
+[<img width="1898" height="914" alt="image" src="https://github.com/user-attachments/assets/d65c6b37-4fa5-446e-90fc-81eb570480d4" />](https://www.bilibili.com/video/BV1sPfEBzEwE)
 
 
 
