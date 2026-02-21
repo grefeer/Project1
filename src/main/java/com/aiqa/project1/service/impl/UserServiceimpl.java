@@ -6,6 +6,7 @@ import com.aiqa.project1.pojo.*;
 import com.aiqa.project1.pojo.document.Document;
 import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
+import com.aiqa.project1.pojo.tag.OrganizationTag;
 import com.aiqa.project1.pojo.tag.TagNameCount;
 import com.aiqa.project1.pojo.tag.UserTag;
 import com.aiqa.project1.pojo.user.LoginDataUser;
@@ -134,10 +135,19 @@ public class UserServiceimpl implements UserService {
             // 为新用户贴标签
             for (UserForCsv user : userList) {
                 String username = user.getUsername();
+                if (user.getTagName() == null || user.getTagName().isEmpty())
+                    continue;
                 String[] tagNames = user.getTagName().split(",");
+
+                System.out.println("TagName" + user.getTagName());
+
                 Arrays.stream(tagNames).forEach(tagName ->
-                    userTagMapper.insertUserTagRsByTagName(username, tagName)
-                );
+                {
+                    OrganizationTag organizationTag = specialTagMapper.selectOne(new QueryWrapper<OrganizationTag>().eq("tag_name", tagName));
+                    if (organizationTag == null) throw new BusinessException(404, "数据库里没有这个标签%s".formatted(tagName), null);
+                    userTagMapper.insertUserTagRsByTagName(username, tagName);
+                });
+
             }
 //            userMapper.insert(userList1);
 //            // 为每个用户夹在默认标签
@@ -252,8 +262,8 @@ public class UserServiceimpl implements UserService {
     @Transactional
     public Boolean deleteUserByUserId(Integer userId) {
         try {
-            // 删除该用户的所有相关信息
-            userTagMapper.delete(new QueryWrapper<UserTag>().eq("user_id", userId));
+            // 删除该用户的所有相关信息,userTagMapper不用使用，因为User表的userId和UserTag的userId绑定，并设置了删除user其tag自动删除
+//            userTagMapper.delete(new QueryWrapper<UserTag>().eq("user_id", userId));
             userMapper.deleteUserById(userId);
             documentMapper.delete(new QueryWrapper<Document>().eq("user_id", userId));
             sessionChatMapper.delete(new QueryWrapper<SessionChat>().eq("user_id", userId));
@@ -401,6 +411,7 @@ public class UserServiceimpl implements UserService {
     private Integer setTagsForNewUser(User user) {
         UserTag entity1 = new UserTag();
         UserTag entity2 = new UserTag();
+        UserTag entity3 = new UserTag();
         Integer userId = userMapper.getUserIdByUserName(user.getUsername());
 
         // 2是个人标签ID，3是公共标签ID
@@ -408,7 +419,13 @@ public class UserServiceimpl implements UserService {
         entity1.setUserId(userId);
         entity2.setTagId(3L);
         entity2.setUserId(userId);
-        userTagMapper.insert(List.of(entity1, entity2));
+        if ("ADMIN".equals(user.getRole())) {
+            entity3.setTagId(1L);
+            entity3.setUserId(userId);
+            userTagMapper.insert(List.of(entity1, entity2, entity3));
+        } else {
+            userTagMapper.insert(List.of(entity1, entity2));
+        }
         return userId;
     }
 

@@ -4,7 +4,7 @@ import com.aiqa.project1.pojo.AuthInfo;
 import com.aiqa.project1.pojo.ResponseCode;
 import com.aiqa.project1.pojo.Result;
 import com.aiqa.project1.service.impl.SpecialTagService;
-import com.aiqa.project1.utils.BusinessException;
+
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
