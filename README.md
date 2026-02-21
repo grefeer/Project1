@@ -2,7 +2,7 @@
 TechDocRAG 是基于 **Java 技术栈** 构建的企业内部技术交流及设备操作指南智能问答系统，依托 RAG（检索增强生成）技术实现多格式技术文档的上传解析、语义检索，并结合大语言模型为用户提供精准的技术咨询服务。系统内置多级权限管控机制保障敏感信息安全，通过流式对话与上下文记忆能力提升问答交互效率。
 
 # 演示视频
-点击下方图片跳转到B站观看视频
+如果需要观看视频，请点击下方图片
 
 [<img width="1898" height="914" alt="image" src="https://github.com/user-attachments/assets/d65c6b37-4fa5-446e-90fc-81eb570480d4" />](https://www.bilibili.com/video/BV1sPfEBzEwE)
 
