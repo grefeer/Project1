@@ -422,7 +422,10 @@ public class RedisStoreUtils {
      */
     public Boolean setSessionChat(Integer userId, Integer sessionId, String message) {
         String key = SystemConfig.SESSION_SUMMARY.formatted(userId);
-        return redisPoolManager.executeWithRetry(template -> template.opsForHash().putIfAbsent(key, sessionId.toString(), message));
+        return redisPoolManager.executeWithRetry(template -> {
+            template.opsForHash().put(key, sessionId.toString(), message);
+            return null;
+        });
     }
 
     /**

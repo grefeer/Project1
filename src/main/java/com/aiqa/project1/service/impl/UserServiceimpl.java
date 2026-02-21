@@ -294,6 +294,7 @@ public class UserServiceimpl implements UserService {
             // 知识库：已上传文档数、有效向量条数、待处理 / 处理失败文档数
             Long documentCount = documentMapper.selectCount(new QueryWrapper<>());
             Long documentSuccessCount = documentMapper.selectCount(new QueryWrapper<Document>().eq("status", "AVAILABLE"));
+            milvusSearchUtils1.createMilvusCollection();
             Long embeddingCount = milvusSearchUtils1.countAllValidVectors();
 
             // ========== 新增：过去7天每日统计 ==========

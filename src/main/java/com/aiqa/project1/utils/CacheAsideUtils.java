@@ -154,7 +154,8 @@ public class CacheAsideUtils {
         redisStoreUtils.setUserMaxSessionId(userId, sessionId);
 
         // 3. 更新会话名称缓存
-        redisStoreUtils.setSessionChat(userId, sessionId, name + "::" + favorites);
+        redisStoreUtils.removeSessionChat(userId);
+//        redisStoreUtils.setSessionChat(userId, sessionId, name + "::" + favorites);
     }
 
 //    /**
