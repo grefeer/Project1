@@ -1,4 +1,0 @@
-aws s3 sync --no-sign-request s3://openneuro.org/ds005170/textdataset/ D:/Chisco-main/Chisco/textdataset/
-aws s3 sync --no-sign-request s3://openneuro.org/ds005170/网站上的文件地址 电脑里的下载地址
-
-aws s3 sync --no-sign-request s3://osf.io/uxamg/files/osfstorage/task1-SR/Matlabfiles D:/Chisco/ZuCo2/task1
