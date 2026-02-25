@@ -45,7 +45,7 @@ cd Project1
   2. 下载Docker，并拉取Redis、RabbitMQ、Milvus等镜像
   3. 配置系统参数
 复制配置文件模板并修改核心配置（数据库连接、向量库地址、大模型 API 等）
-  4. 获取前端代码，并配置环境
+
 ## 功能详解
 ### 1. 文件上传与权限管控
 普通用户在文件上传界面选择自有标签完成文件上传
@@ -83,7 +83,7 @@ cd Project1
 
 
 ### 注意
-此respiratory仅是后端代码，前端代码请见本账号的project1frontend项目
+详细前端代码请见本账号的project1frontend项目
 
 所有代码均在master分支
 
