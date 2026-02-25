@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -41,7 +42,11 @@ public class DataProcessUtils {
 
     private final TextStructUtil textStructUtil;
     private final MilvusSearchUtils milvusSearchUtils;
-    private final MilvusClientV2 milvusClient;
+
+    @Autowired
+    @Lazy
+    private MilvusClientV2 milvusClient;
+
     private final AsyncTaskExecutor asyncTaskExecutor;
     private final Gson gson;
     private final ChildParentTextStructUtil childParentTextStructUtil;
@@ -54,11 +59,11 @@ public class DataProcessUtils {
     public DataProcessUtils(
             TextStructUtil textStructUtil,
             MilvusSearchUtils milvusSearchUtils,
-            MilvusClientV2 milvusClient,
+//            MilvusClientV2 milvusClient,
             AsyncTaskExecutor asyncTaskExecutor, ChildParentTextStructUtil childParentTextStructUtil, MilvusSearchUtils1 milvusSearchUtils1) {
         this.textStructUtil = textStructUtil;
         this.milvusSearchUtils = milvusSearchUtils;
-        this.milvusClient = milvusClient;
+//        this.milvusClient = milvusClient;
         this.asyncTaskExecutor = asyncTaskExecutor;
         this.gson = new Gson();
         this.childParentTextStructUtil = childParentTextStructUtil;

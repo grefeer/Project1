@@ -18,10 +18,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class MilvusConfig {
 
+    @Value("${custom.host}")
+    private String host;
+
     @Bean
     public MilvusClientV2  milvusClient() {
         return new MilvusClientV2(ConnectConfig.builder()
-                .uri("http://localhost:19530")
+                .uri("http://%s:19530".formatted(host))
                 .token("root:Milvus")
                 .dbName("Project1")
                 .build());
