@@ -44,7 +44,6 @@ public class DataProcessUtils {
     private final MilvusSearchUtils milvusSearchUtils;
 
     @Autowired
-    @Lazy
     private MilvusClientV2 milvusClient;
 
     private final AsyncTaskExecutor asyncTaskExecutor;
@@ -445,7 +444,7 @@ public class DataProcessUtils {
                 row.addProperty("author", metadata.getAuthor());
             }
             if (metadata.getTitle() != null) {
-                row.addProperty("title", metadata.getTitle());
+                row.addProperty("title", metadata.getTitle().substring(0, Math.min(metadata.getTitle().length(), 190)));
             }
             if (metadata.getDate() != null) {
                 row.addProperty("timestamp", metadata.getDate());

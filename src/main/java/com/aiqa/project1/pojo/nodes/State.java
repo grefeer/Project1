@@ -1,4 +1,4 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.pojo.nodes;
 
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.rag.content.Content;

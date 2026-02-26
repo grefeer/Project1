@@ -1,4 +1,4 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.pojo.nodes;
 
 import lombok.Data;
 

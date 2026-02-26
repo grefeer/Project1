@@ -2,7 +2,7 @@ package com.aiqa.project1.utils;
 
 import com.aiqa.project1.mapper.SessionChatMapper;
 import com.aiqa.project1.mapper.UserChatMemoryMapper;
-import com.aiqa.project1.nodes.State;
+import com.aiqa.project1.pojo.nodes.State;
 import com.aiqa.project1.pojo.qa.SessionChat;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -10,9 +10,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 

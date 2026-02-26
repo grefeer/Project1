@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 //@MapperScan("com.aiqa.project1.mapper")
 @SpringBootApplication
 @EnableScheduling
-@EnableAsync
+//@EnableAsync
 public class Project1Application {
 
     public static void main(String[] args) {

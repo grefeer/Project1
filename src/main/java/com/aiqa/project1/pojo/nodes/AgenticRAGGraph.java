@@ -1,13 +1,11 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.pojo.nodes;
 
 import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.mapper.DocumentMapper;
-import com.aiqa.project1.pojo.document.Document;
 import com.aiqa.project1.pojo.qa.RetrievalDecision;
 import com.aiqa.project1.pojo.tag.OrganizationTag;
 import com.aiqa.project1.service.impl.SpecialTagService;
 import com.aiqa.project1.utils.*;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import io.milvus.v2.service.vector.response.SearchResp;
@@ -16,17 +14,15 @@ import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
-import org.bsc.langgraph4j.checkpoint.MemorySaver;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.Exceptions;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -293,6 +289,7 @@ public class AgenticRAGGraph {
                 }
             } catch (Exception e) {
                 e.printStackTrace();
+                throw e;
             }
             return Map.of("retrieval_info", retrievalInfo);
         });
@@ -323,6 +320,7 @@ public class AgenticRAGGraph {
                             sseEmitter.send(SseEmitter.event().name("chat").id(state.getSessionId().toString()).data(chatMemory));
                         } catch (IOException e) {
                             e.printStackTrace();
+                            throw Exceptions.propagate(e);
                         }
                     }
 
@@ -361,6 +359,7 @@ public class AgenticRAGGraph {
                     sseEmitter.send(SseEmitter.event().name("chat").id(state.getSessionId().toString()).data(chat));
                 } catch (IOException e) {
                     e.printStackTrace();
+                    throw e;
                 }
             }
 

@@ -1,4 +1,4 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.pojo.nodes;
 
 import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.pojo.tag.OrganizationTag;
@@ -14,7 +14,6 @@ import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
-import org.bsc.langgraph4j.checkpoint.MemorySaver;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
@@ -85,8 +84,8 @@ public class NaiveRAGGraph {
                 return Map.of("retrieval_info", contentList);
             } catch (Exception e) {
                 e.printStackTrace();
+                throw e;
             }
-            return Map.of();
         });
 
 

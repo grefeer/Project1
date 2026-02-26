@@ -1,4 +1,4 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.pojo.nodes;
 
 import com.aiqa.project1.pojo.tag.OrganizationTag;
 import org.bsc.langgraph4j.state.AgentState;

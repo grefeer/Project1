@@ -3,27 +3,22 @@ package com.aiqa.project1.service.impl;
 
 import com.aiqa.project1.mapper.SessionChatMapper;
 import com.aiqa.project1.mapper.UserChatMemoryMapper;
-import com.aiqa.project1.nodes.*;
 import com.aiqa.project1.pojo.ResponseCode;
 import com.aiqa.project1.pojo.Result;
-import com.aiqa.project1.pojo.qa.SessionChat;
+import com.aiqa.project1.pojo.nodes.*;
 import com.aiqa.project1.pojo.qa.UserChatMemory;
 import com.aiqa.project1.utils.CacheAsideUtils;
 import com.aiqa.project1.utils.RedisStoreUtils;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.extern.slf4j.Slf4j;
-import org.bsc.async.AsyncGenerator;
 import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
-import org.bsc.langgraph4j.NodeOutput;
-import org.bsc.langgraph4j.state.AgentState;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 
@@ -67,6 +62,8 @@ public class QuestionAnsweringService {
     """;
     private final SessionChatMapper sessionChatMapper;
     private final AgenticRAGGraph agenticRAGGraph;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     public QuestionAnsweringService( RedisStoreUtils redisStoreUtils, UserChatMemoryMapper userChatMemoryMapper, CacheAsideUtils cacheAsideUtils, OpenAiChatModel douBaoLite, SessionChatMapper sessionChatMapper, AgenticRAGGraph agenticRAGGraph, NaiveRAGGraph naiveRAGGraph, SubQueryRAGGraph subQueryRAGGraph) throws GraphStateException {
         this.redisStoreUtils = redisStoreUtils;
@@ -99,7 +96,7 @@ public class QuestionAnsweringService {
      * @param memoryId
      * @param query
      */
-    @Async("qaTaskExecutor")
+//    @Async("qaTaskExecutor")
     public void answerQuestion(Integer userId, Integer sessionId, Integer memoryId, String query, Integer ragMode) {
 //        stateProducer.run(userId, sessionId, memoryId, query);
         // 1. 关键校验：检查naiveRAGGraph是否成功注入（最容易被忽略的点）
@@ -125,15 +122,20 @@ public class QuestionAnsweringService {
         redisStoreUtils.setChatMemory(userId,sessionId, "<用户问题>" + query);
         // 3. 执行图（增加异常捕获，避免直接get()掩盖真实错误）
         if (ragMode == null) {
-            agenticRagStateCompiledGraph.invoke(initialStateData);
+//            agenticRagStateCompiledGraph.invoke(initialStateData);
+            rabbitTemplate.convertAndSend("rag.chat", "rag.agentic", initialStateData);
         } else if (ragMode == 1) {
-            naiveRagStateCompiledGraph.invoke(initialStateData);
+//            naiveRagStateCompiledGraph.invoke(initialStateData);
+            rabbitTemplate.convertAndSend("rag.chat", "rag.naive", initialStateData);
         } else if (ragMode == 2) {
-            subQueryRAGStateCompiledGraph.invoke(initialStateData);
+//            subQueryRAGStateCompiledGraph.invoke(initialStateData);
+            rabbitTemplate.convertAndSend("rag.chat", "rag.subquery", initialStateData);
         } else if (ragMode == 3) {
-            agenticRagStateCompiledGraph.invoke(initialStateData);
+//            agenticRagStateCompiledGraph.invoke(initialStateData);
+            rabbitTemplate.convertAndSend("rag.chat", "rag.agentic", initialStateData);
         } else {
-            agenticRagStateCompiledGraph.invoke(initialStateData);
+//            agenticRagStateCompiledGraph.invoke(initialStateData);
+            rabbitTemplate.convertAndSend("rag.chat", "rag.agentic", initialStateData);
         }
 
 //        redisStoreUtils.setChatMemory(userId,sessionId, "<用户问题>" + query);

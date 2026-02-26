@@ -1,4 +1,4 @@
-package com.aiqa.project1.nodes;
+package com.aiqa.project1.pojo.nodes;
 
 import com.aiqa.project1.config.SystemConfig;
 import com.aiqa.project1.pojo.tag.OrganizationTag;
@@ -11,7 +11,6 @@ import org.bsc.langgraph4j.CompiledGraph;
 import org.bsc.langgraph4j.GraphStateException;
 import org.bsc.langgraph4j.StateGraph;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
-import org.bsc.langgraph4j.checkpoint.MemorySaver;
 
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
@@ -105,6 +104,7 @@ public class SubQueryRAGGraph {
                 });
             } catch (Exception e) {
                 e.printStackTrace();
+                throw e;
             }
             return Map.of("retrieval_info", retrievalInfo);
         });
@@ -120,7 +120,7 @@ public class SubQueryRAGGraph {
                 return Map.of("sub_query", subQueries);
             } catch (Exception e) {
                 e.printStackTrace();
-                return Map.of();
+                throw e;
             }
         });
 
@@ -156,12 +156,10 @@ public class SubQueryRAGGraph {
                         ));
 
                 return Map.of("answer", finalAnswer);
-            } catch (InterruptedException e) {
+            } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
-            } catch (ExecutionException e) {
-                e.printStackTrace();
+                throw e;
             }
-            return Map.of();
         });
         
         // Define the graph
