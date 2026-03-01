@@ -1,14 +1,12 @@
 package com.aiqa.project1.service.impl;
 
 import com.aiqa.project1.controller.UserController;
-import com.aiqa.project1.mapper.DocumentMapper;
-import com.aiqa.project1.mapper.DocumentTagMapper;
-import com.aiqa.project1.mapper.DocumentVersionMapper;
-import com.aiqa.project1.mapper.SpecialTagMapper;
+import com.aiqa.project1.mapper.*;
 import com.aiqa.project1.pojo.*;
 import com.aiqa.project1.pojo.document.*;
 import com.aiqa.project1.pojo.tag.DocumentTag;
 import com.aiqa.project1.pojo.tag.OrganizationTag;
+import com.aiqa.project1.pojo.tag.UserTag;
 import com.aiqa.project1.service.DocsService;
 import com.aiqa.project1.utils.*;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -57,6 +55,8 @@ public class DocsServiceimpl implements DocsService {
     private SpecialTagMapper specialTagMapper;
     @Autowired
     private SpecialTagService specialTagService;
+    @Autowired
+    private UserTagMapper userTagMapper;
 
     public DocsServiceimpl(DocumentMapper documentMapper, TencentCOSUtil tencentCOSUtil, SnowFlakeUtil snowFlakeUtil, DocumentVersionMapper versionMapper, RabbitTemplate rabbitTemplate) {
         this.documentMapper = documentMapper;
@@ -290,7 +290,7 @@ public class DocsServiceimpl implements DocsService {
             String finalSessionIds = String.join(",", sessionIdSet);
             document.setSessionId(finalSessionIds);
             // 将其保存到本地
-            ossPath = minIOStoreUtils.getOssPath(userId, documentId, documentName, document.getCurrentVersion());
+            ossPath = minIOStoreUtils.getOssPath(String.valueOf(tagId), documentId, documentName, document.getCurrentVersion());
             String previewUrl = minIOStoreUtils.uploadAndGetPublicUrl("data", ossPath, file);
 
             if (previewUrl == null) {
@@ -541,7 +541,12 @@ public class DocsServiceimpl implements DocsService {
             result.setData(null);
             return result;
         }
-        if (! document.getUserId().equals(authInfo.getUserId()) && authInfo.getRole().equals("USERS")) {
+
+        String tagName = document.getTagType();
+        OrganizationTag organizationTag = specialTagMapper.selectOne(new QueryWrapper<OrganizationTag>().eq("tag_name", tagName));
+        Long tagId = organizationTag.getTagId();
+        boolean exists = userTagMapper.exists(new QueryWrapper<UserTag>().eq("user_id", authInfo.getUserId()).eq("tag_id", tagId));
+        if (! exists) {
             // 无权限访问
             result.setCode(403);
             result.setMessage("无权限访问");

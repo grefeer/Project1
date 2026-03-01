@@ -35,7 +35,7 @@ public class MinIOStoreUtils {
         String contentType = file.getContentType();
         System.out.println(contentType);
         if (contentType == null) {
-            // 如果猜不到类型，设置为通用的二进制流，或者根据后缀手动判断
+            // 如果猜不到类型，设置为通用的二进制流
             contentType = "application/octet-stream";
         }
 
@@ -80,9 +80,9 @@ public class MinIOStoreUtils {
         return ENDPOINT + "/" + bucketName + "/" + savePath;
     }
 
-    public String getOssPath(String userId, String documentId, String documentName, Long version) {
+    public String getOssPath(String tagId, String documentId, String documentName, Long version) {
 //        return URLEncoder.encode(userId + "/" + documentId + "/" + version + "/" + documentName, StandardCharsets.UTF_8);
-        return userId + "/" + documentId + "/" + version + "/" + documentName;
+        return tagId + "/" + documentId + "/" + version + "/" + documentName;
     }
 
     // 修改方法签名，增加 displayName
