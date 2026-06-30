@@ -61,9 +61,9 @@ public class RagConsumer {
     public void agenticRagRun(Map<String, Object> initialStateData, Channel channel, @Header(AmqpHeaders.DELIVERY_TAG) long tag) throws IOException {
         try {
             // 测试Error
-            throw new Exception("测试");
-//            agenticRagStateCompiledGraph.invoke(initialStateData);
-//            channel.basicAck(tag, false);
+//            throw new Exception("测试");
+            agenticRagStateCompiledGraph.invoke(initialStateData);
+            channel.basicAck(tag, false);
         } catch (Exception e) {
             e.printStackTrace();
 //            initialStateData.put("dead_message", e.getMessage());

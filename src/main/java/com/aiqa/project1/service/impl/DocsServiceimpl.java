@@ -435,9 +435,11 @@ public class DocsServiceimpl implements DocsService {
             Document document = (Document) result.getData();
             if (document == null)
                 return result;
+            DocumentTag documentTag = documentTagMapper.selectOne(new QueryWrapper<DocumentTag>().eq("document_id", documentId));
+            Integer tagId = documentTag.getTagId();
             // 从本地下载
             String key = minIOStoreUtils.getOssPath(
-                    authInfo.getUserId(),
+                    tagId.toString(),
                     documentId,
                     "",
                     (version == null) ? document.getCurrentVersion() : version

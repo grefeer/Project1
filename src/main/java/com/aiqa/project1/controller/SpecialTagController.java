@@ -167,7 +167,7 @@ public class SpecialTagController {
     }
 
     /**
-     * 获取所有标签的信息
+     * 删除所有标签的信息
      * @param request
      * @return
      */
@@ -181,6 +181,13 @@ public class SpecialTagController {
         return specialTagService.deleteTag(userId, tagId);
     }
 
+    /**
+     * 删除user和tag的关系
+     * @param userId
+     * @param tagName
+     * @param request
+     * @return
+     */
     @DeleteMapping("/remove/user/{userId}")
     public Result deleteUser(
             @PathVariable("userId") Integer userId,

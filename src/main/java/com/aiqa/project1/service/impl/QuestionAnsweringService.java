@@ -193,9 +193,6 @@ public class QuestionAnsweringService {
             }
             Integer currentChatMemoryCount = Math.toIntExact(chatMemoryCountLong);
 
-            if (currentChatMemoryCount < memoryId.longValue()) {
-                return Result.define(202, "AI 正在思考中...", null);
-            }
 
             int count = currentChatMemoryCount - memoryId;
             if (count <= 0) return Result.define(202, "AI 正在思考中...", null);
